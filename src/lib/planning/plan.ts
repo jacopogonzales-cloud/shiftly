@@ -90,7 +90,10 @@ export async function planJob(jobId: number): Promise<PlanResult> {
 
   const prompt = {
     job: { title: job.title, site: job.site, budgetEur: job.budgetCents / 100 },
-    rules: { minRestHours: ctx.minRestHours, note: "Candidates already satisfy role, availability, overlap and rest rules on their own. Picking the same person for two shifts may still break the rest rule; prefer continuity only when shifts are on different days." },
+    rules: {
+      minRestHours: ctx.minRestHours,
+      note: "Every listed candidate is already valid for that shift (role, availability, no overlap, rest). Shifts on the same day form one working day: the same person may work both the morning and the afternoon shift of a day, and that is preferred. The rest rule only applies between days. Code re-checks every pick.",
+    },
     shifts: open.map((o) => ({
       shiftId: o.shift.id,
       day: romeDayKey(o.shift.startsAt),
@@ -119,6 +122,7 @@ export async function planJob(jobId: number): Promise<PlanResult> {
         "Prefer people marked available that day and high reliability; keep cost within budget; reuse the same people across days when it helps continuity.",
         "Each reason is one plain sentence about this person for this shift. English. No hype, no apologies.",
         "Nobody has been contacted yet: never say a person confirmed, accepted or agreed. Say 'marked available' for availability.",
+        "The summary describes the plan you are returning (who covers what, the trade-off). Never call the plan impossible or non-compliant: code reports any gaps separately.",
       ].join("\n"),
       user: JSON.stringify(prompt),
     });
