@@ -1,0 +1,129 @@
+/* Bryntum Scheduler 7.3.7 (svalbard-light) themed per docs/design/design-system.md §06.
+   Only documented CSS custom properties and Bryntum's public classes; business rules live in code. */
+
+.shiftly-scheduler {
+  --b-widget-font-family: var(--font-manrope), sans-serif;
+  --b-primary: var(--accent);
+  --b-widget-focus-outline-color: var(--focus-ring);
+  --b-grid-background: var(--surface);
+  --b-grid-cell-background: var(--surface);
+  --b-grid-cell-border-color: var(--line);
+  --b-grid-cell-hover-background: var(--surface-hover);
+  --b-grid-cell-selected-background: var(--surface-hover);
+  --b-grid-cell-padding-inline: 16px;
+  --b-grid-row-border-color: var(--line);
+  --b-grid-header-background: var(--surface-alt);
+  --b-grid-header-border-color: var(--line);
+  --b-grid-header-color: var(--ink-secondary);
+  --b-grid-header-font-size: 11px;
+  --b-grid-header-font-weight: 800;
+  --b-grid-header-text-transform: uppercase;
+  --b-sch-event-padding-inline: 8px;
+  --b-sch-event-border-radius: 8px;
+  --b-sch-event-font-size: 11px;
+  --b-sch-event-font-weight: 700;
+
+  font-family: var(--font-manrope), sans-serif;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+/* Time axis header */
+.shiftly-scheduler .b-sch-header-timeaxis-cell {
+  color: var(--ink-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+.shiftly-scheduler .b-sch-header-row:last-child .b-sch-header-timeaxis-cell {
+  font-family: var(--font-plex-mono), monospace;
+  font-weight: 500;
+  color: var(--ink-muted);
+}
+
+/* People column */
+.shiftly-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.shiftly-avatar {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 800;
+  background: var(--neutral-bg);
+  color: var(--neutral-fg);
+}
+.shiftly-avatar.role-installer { background: var(--role-installer-bg); color: var(--role-installer); }
+.shiftly-avatar.role-electrician { background: var(--role-electrician-bg); color: var(--role-electrician); }
+.shiftly-avatar.role-rigger { background: var(--role-rigger-bg); color: var(--role-rigger); }
+.shiftly-avatar.role-driver { background: var(--role-driver-bg); color: var(--role-driver); }
+.shiftly-person-text { min-width: 0; line-height: 16px; }
+.shiftly-person-name { font-size: 12px; font-weight: 800; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shiftly-person-role { font-size: 11px; color: var(--ink-muted); white-space: nowrap; }
+
+/* Event bars: 34px (row 58 − 2×12 bar margin), tinted role background, 2px role edge */
+.shiftly-scheduler .b-sch-event {
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+  border: 1px solid transparent;
+  border-inline-start-width: 2px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+}
+.shiftly-scheduler .b-sch-event.role-installer { --b-sch-event-background: var(--role-installer-bg); background: var(--role-installer-bg); border-inline-start-color: var(--role-installer); }
+.shiftly-scheduler .b-sch-event.role-electrician { --b-sch-event-background: var(--role-electrician-bg); background: var(--role-electrician-bg); border-inline-start-color: var(--role-electrician); }
+.shiftly-scheduler .b-sch-event.role-rigger { --b-sch-event-background: var(--role-rigger-bg); background: var(--role-rigger-bg); border-inline-start-color: var(--role-rigger); }
+.shiftly-scheduler .b-sch-event.role-driver { --b-sch-event-background: var(--role-driver-bg); background: var(--role-driver-bg); border-inline-start-color: var(--role-driver); }
+
+.shiftly-ev-title { display: flex; align-items: center; gap: 5px; line-height: 14px; white-space: nowrap; }
+.shiftly-ev-time { font-family: var(--font-plex-mono), monospace; font-size: 10px; font-weight: 500; line-height: 13px; color: var(--ink-secondary); }
+.shiftly-ev-icon { font-size: 10px; }
+
+/* Proposed (not yet sent): outlined in the role colour, white fill */
+.shiftly-scheduler .b-sch-event.status-proposed { background: var(--surface); border-style: dashed; border-color: currentColor; }
+.shiftly-scheduler .b-sch-event.status-proposed.role-installer { border-color: var(--role-installer); }
+.shiftly-scheduler .b-sch-event.status-proposed.role-electrician { border-color: var(--role-electrician); }
+.shiftly-scheduler .b-sch-event.status-proposed.role-rigger { border-color: var(--role-rigger); }
+.shiftly-scheduler .b-sch-event.status-proposed.role-driver { border-color: var(--role-driver); }
+.shiftly-scheduler .b-sch-event.status-proposed { border-inline-start-style: solid; }
+
+/* Declined: dashed error edge, 60% opacity, readable label (no strikethrough) */
+.shiftly-scheduler .b-sch-event.declined {
+  border: 1px dashed var(--error-fg);
+  background: var(--error-bg);
+  color: var(--error-fg);
+  opacity: 0.6;
+}
+
+/* Conflict: 2px solid error border + icon */
+.shiftly-scheduler .b-sch-event.conflict { border: 2px solid var(--error-fg); }
+.shiftly-scheduler .b-sch-event.conflict .shiftly-ev-icon { color: var(--error-fg); }
+
+/* Selected: neutral dark outline */
+.shiftly-scheduler .b-sch-event-wrap.b-selected .b-sch-event { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+/* Nights: quiet surface tint via the TimeRanges feature (not fake events) */
+.shiftly-scheduler .b-sch-time-range.shiftly-offhours { background: var(--surface-alt); }
+.shiftly-scheduler .b-sch-time-range.shiftly-offhours .b-sch-time-range-name { display: none; }
+.shiftly-scheduler .b-sch-current-time { --b-sch-time-range-color: var(--error-fg); }
+
+/* Tooltip */
+.shiftly-tip-reason { margin-top: 4px; color: var(--ink-secondary); max-width: 280px; }
+.shiftly-tip-conflict { margin-top: 4px; color: var(--error-fg); font-weight: 700; }
+
+@media (prefers-reduced-motion: reduce) {
+  .shiftly-scheduler * { transition: none !important; animation: none !important; }
+}

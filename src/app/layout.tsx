@@ -4,7 +4,8 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Mark, Wordmark } from "@/components/brand";
 import { CompanyBadge, CompanyBadgeView } from "@/components/company-name";
-import { NavLinks } from "@/components/nav-links";
+import { NavLinks, NavList } from "@/components/nav-links";
+import { Toaster } from "@/components/toast";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -40,7 +41,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
 
           <p className="t-eyebrow text-ink-muted mt-[52px] mb-3 hidden px-[15px] text-[10px] wide:block">Workspace</p>
           <div className="md:mt-[52px] wide:mt-0">
-            <NavLinks />
+            <Suspense fallback={<NavList pathname={null} />}>
+              <NavLinks />
+            </Suspense>
           </div>
 
           <div className="border-line mt-auto hidden border-t pt-[22px] md:block wide:px-2">
@@ -60,6 +63,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <main>{children}</main>
           </div>
         </div>
+        <Toaster />
       </body>
     </html>
   );

@@ -13,11 +13,15 @@ const items: { href: string; label: string; icon: LucideIcon }[] = [
 
 /** Rail nav: full labels at ≥1200px, icons with tooltips at 768–1199px, horizontal strip below 768px. */
 export function NavLinks() {
-  const pathname = usePathname();
+  return <NavList pathname={usePathname()} />;
+}
+
+/** Also rendered as the Suspense fallback (no active item) while the pathname streams in. */
+export function NavList({ pathname }: { pathname: string | null }) {
   return (
     <nav aria-label="Main" className="flex gap-1.5 overflow-x-auto md:flex-col">
       {items.map(({ href, label, icon: Icon }) => {
-        const active = pathname === href || pathname.startsWith(`${href}/`);
+        const active = pathname !== null && (pathname === href || pathname.startsWith(`${href}/`));
         return (
           <Link
             key={href}

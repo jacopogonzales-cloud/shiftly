@@ -1,5 +1,6 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Role } from "@/generated/prisma/enums";
@@ -7,8 +8,11 @@ import { logActivity } from "@/lib/activity";
 import { AIError } from "@/lib/ai/openai";
 import { extractJob, type ExtractedJob } from "@/lib/ai/extract";
 import { db } from "@/lib/db";
+import { EDITABLE_STATUSES } from "@/lib/job-detail";
+import { checkAssignment } from "@/lib/planning/constraints";
+import { loadPlanningContext } from "@/lib/planning/context";
 import { planJob } from "@/lib/planning/plan";
-import { romeDateTime } from "@/lib/time";
+import { romeDateTime, romeDayKey } from "@/lib/time";
 
 const ROLES: Role[] = ["MONTATORE", "ELETTRICISTA", "RIGGER", "AUTISTA"];
 
@@ -130,4 +134,50 @@ export async function planJobAction(jobId: number): Promise<ActionResult> {
     console.error("planJobAction", err);
     return { ok: false, message: "Couldn't build a plan. Nothing was saved." };
   }
+}
+
+/** Drag & drop: give an assignment to another person. Hard constraints are re-checked here, whatever the browser allowed. */
+export async function moveAssignmentAction(assignmentId: number, toWorkerId: number): Promise<ActionResult> {
+  const a = await db().assignment.findUnique({
+    where: { id: assignmentId },
+    include: { worker: { select: { name: true } }, shift: { include: { job: { select: { id: true, status: true } } } } },
+  });
+  if (!a) return { ok: false, message: "That assignment no longer exists. Reload the page." };
+  if (!EDITABLE_STATUSES.includes(a.shift.job.status)) return { ok: false, message: "Schedule is locked once the job has started." };
+  if (a.status === "DECLINED") return { ok: false, message: "Declined invitations stay in the history; plan a replacement instead." };
+  if (a.workerId === toWorkerId) return { ok: true, message: "No change." };
+
+  const ctx = await loadPlanningContext(a.shift.startsAt, a.shift.endsAt);
+  const target = ctx.facts.find((w) => w.id === toWorkerId);
+  if (!target) return { ok: false, message: "That person is not in your crew." };
+  const conflicts = checkAssignment({
+    worker: target,
+    shift: { shiftId: a.shiftId, role: a.shift.role, start: a.shift.startsAt.getTime(), end: a.shift.endsAt.getTime() },
+    bookings: ctx.bookings,
+    minRestHours: ctx.minRestHours,
+    dayKey: romeDayKey,
+    ignoreAssignmentId: a.id,
+  });
+  if (conflicts.length > 0) return { ok: false, message: conflicts[0].message };
+  const previous = await db().assignment.findUnique({ where: { shiftId_workerId: { shiftId: a.shiftId, workerId: toWorkerId } }, select: { status: true } });
+  if (previous) return { ok: false, message: `${target.name.split(" ")[0]} already declined this shift.` };
+
+  const from = a.worker.name.split(" ")[0];
+  const to = target.name.split(" ")[0];
+  await db().$transaction(async (tx) => {
+    // A new person means a new invitation: back to PROPOSED with a fresh link.
+    await tx.assignment.update({
+      where: { id: a.id },
+      data: { workerId: toWorkerId, status: "PROPOSED", token: randomBytes(16).toString("base64url"), reason: `Moved by the operator from ${from}.` },
+    });
+    await logActivity(tx, {
+      jobId: a.shift.job.id,
+      actor: "operator",
+      type: "assignment.moved",
+      message: `${to} replaces ${from} on ${romeDayKey(a.shift.startsAt)}. Constraints re-checked: all clear.`,
+      data: { assignmentId: a.id, fromWorkerId: a.workerId, toWorkerId, previousStatus: a.status },
+    });
+  });
+  refresh();
+  return { ok: true, message: `${to} now has this shift. Proposed, not sent.` };
 }
