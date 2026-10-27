@@ -75,15 +75,16 @@ model Job {
 }
 
 model Shift {
-  id          Int          @id @default(autoincrement())
-  jobId       Int
-  job         Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  startsAt    DateTime
-  endsAt      DateTime
-  role        Role
-  headcount   Int          @default(1)
-  notes       String?
-  assignments Assignment[]
+  id           Int          @id @default(autoincrement())
+  jobId        Int
+  job          Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  startsAt     DateTime
+  endsAt       DateTime
+  role         Role
+  headcount    Int          @default(1)
+  breakMinutes Int          @default(0) // unpaid
+  notes        String?
+  assignments  Assignment[]
 
   @@index([jobId])
 }

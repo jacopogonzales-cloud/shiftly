@@ -12,9 +12,12 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
-    "payouts:smoke": "tsx --env-file=.env.local scripts/payouts-smoke.ts"
+    "payouts:smoke": "tsx --env-file=.env.local scripts/payouts-smoke.ts",
+    "test": "tsx --tsconfig tsconfig.json --test \"src/**/*.test.ts\""
   },
   "dependencies": {
+    "@bryntum/scheduler": "npm:@bryntum/scheduler-trial@^7.3.7",
+    "@bryntum/scheduler-react": "^7.3.7",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "lucide-react": "^1.62.0",
