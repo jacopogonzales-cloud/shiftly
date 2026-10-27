@@ -61,13 +61,13 @@ async function JobsOverview() {
     <>
       <MetricStrip
         metrics={[
-          { label: "Active & recent jobs", value: String(jobs.length).padStart(2, "0"), caption: "Across your workspace" },
+          { label: "Active & recent jobs", value: String(jobs.length), caption: "Across your workspace" },
           {
             label: "Need your attention",
-            value: String(attention).padStart(2, "0"),
+            value: String(attention),
             caption: attention === 0 ? "Nothing waiting on you" : [toPay && `${toPay} to pay`, withDeclines && `${withDeclines} with declines`].filter(Boolean).join(" · "),
           },
-          { label: "Crew assignments", value: String(assignments).padStart(2, "0"), caption: `Booked across ${staffed} ${staffed === 1 ? "job" : "jobs"}` },
+          { label: "Crew assignments", value: String(assignments), caption: `Booked across ${staffed} ${staffed === 1 ? "job" : "jobs"}` },
           { label: "Ready to pay", value: formatEUR(readyToPayCents), money: true, caption: toPay === 0 ? "No jobs waiting for payout" : `Planned cost of ${toPay} ${toPay === 1 ? "job" : "jobs"}` },
         ]}
       />
