@@ -3,7 +3,7 @@ import { connection } from "next/server";
 import type { AssignmentStatus, JobStatus, Role } from "@/generated/prisma/enums";
 import { db } from "@/lib/db";
 import { initials } from "@/lib/format";
-import { shiftPayCents } from "@/lib/pay";
+import { personPayCents } from "@/lib/pay";
 import { checkAssignment, type Booking, type Conflict, type WorkerFacts } from "@/lib/planning/constraints";
 import { loadPlanningContext } from "@/lib/planning/context";
 import { roleLabel } from "@/lib/roles";
@@ -80,24 +80,34 @@ export async function getJobDetail(id: number) {
     .map((w) => ({ id: w.id, name: w.name, initials: initials(w.name), role: w.role, roleLabel: roleLabel[w.role], onJob: onJob.has(w.id) }))
     .sort((a, b) => Number(b.onJob) - Number(a.onJob) || roleOrder.indexOf(a.role) - roleOrder.indexOf(b.role) || a.name.localeCompare(b.name));
 
-  // Per-person hours and planned pay (planned minutes already exclude unpaid breaks).
-  const people = new Map<number, { workerId: number; name: string; role: Role; planned: number; actual: number | null; plannedCents: number; actualCents: number | null }>();
+  // Per-person hours and pay. Planned minutes already exclude unpaid breaks; overtime is per working day.
+  type Person = { workerId: number; name: string; role: Role; rate: number; planned: { day: string; minutes: number }[]; actual: { day: string; minutes: number }[] | null };
+  const byWorker = new Map<number, Person>();
   for (const shift of job.shifts) {
+    const day = romeDayKey(shift.startsAt);
     for (const a of shift.assignments) {
       if (a.status === "DECLINED") continue;
-      const p = people.get(a.workerId) ?? { workerId: a.workerId, name: a.worker.name, role: a.worker.role, planned: 0, actual: 0 as number | null, plannedCents: 0, actualCents: 0 as number | null };
-      p.planned += a.plannedMinutes;
-      p.plannedCents += shiftPayCents(a.plannedMinutes, a.worker.hourlyRateCents, ctx.rules);
-      if (a.actualMinutes === null || p.actual === null) {
-        p.actual = null;
-        p.actualCents = null;
-      } else {
-        p.actual += a.actualMinutes;
-        p.actualCents = (p.actualCents ?? 0) + shiftPayCents(a.actualMinutes, a.worker.hourlyRateCents, ctx.rules);
-      }
-      people.set(a.workerId, p);
+      const p = byWorker.get(a.workerId) ?? { workerId: a.workerId, name: a.worker.name, role: a.worker.role, rate: a.worker.hourlyRateCents, planned: [], actual: [] };
+      p.planned.push({ day, minutes: a.plannedMinutes });
+      if (a.actualMinutes === null) p.actual = null;
+      else p.actual?.push({ day, minutes: a.actualMinutes });
+      byWorker.set(a.workerId, p);
     }
   }
+  const people = new Map(
+    [...byWorker.values()].map((p) => [
+      p.workerId,
+      {
+        workerId: p.workerId,
+        name: p.name,
+        role: p.role,
+        planned: p.planned.reduce((n, x) => n + x.minutes, 0),
+        actual: p.actual ? p.actual.reduce((n, x) => n + x.minutes, 0) : null,
+        plannedCents: personPayCents(p.planned, p.rate, ctx.rules),
+        actualCents: p.actual ? personPayCents(p.actual, p.rate, ctx.rules) : null,
+      },
+    ]),
+  );
 
   const live = events.filter((e) => e.status !== "DECLINED");
   const slots = job.shifts.reduce((n, s) => n + s.headcount, 0);

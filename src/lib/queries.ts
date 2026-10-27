@@ -2,9 +2,11 @@ import "server-only";
 import { connection } from "next/server";
 import { db } from "@/lib/db";
 import { TIME_ZONE } from "@/lib/format";
-import { DEFAULT_PAY_RULES, shiftPayCents, type PayRules } from "@/lib/pay";
+import { crewPayCents, DEFAULT_PAY_RULES, type PayRules } from "@/lib/pay";
 
 // Read-side queries for the shell. Each one waits for a request so nothing touches the DB at build time.
+
+const dayKey = new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE });
 
 export async function getSettings() {
   await connection();
@@ -36,7 +38,8 @@ export async function getJobs() {
         shifts: {
           select: {
             headcount: true,
-            assignments: { select: { status: true, plannedMinutes: true, worker: { select: { hourlyRateCents: true } } } },
+            startsAt: true,
+            assignments: { select: { status: true, workerId: true, plannedMinutes: true, worker: { select: { hourlyRateCents: true } } } },
           },
         },
         payoutBatches: { select: { items: { select: { status: true, amountCents: true } } } },
@@ -46,9 +49,12 @@ export async function getJobs() {
   ]);
 
   return jobs.map((job) => {
-    const assignments = job.shifts.flatMap((s) => s.assignments);
+    const assignments = job.shifts.flatMap((s) => s.assignments.map((a) => ({ ...a, day: dayKey.format(s.startsAt) })));
     const live = assignments.filter((a) => a.status !== "DECLINED");
-    const plannedCents = live.reduce((n, a) => n + shiftPayCents(a.plannedMinutes, a.worker.hourlyRateCents, rules), 0);
+    const plannedCents = crewPayCents(
+      live.map((a) => ({ workerId: a.workerId, day: a.day, minutes: a.plannedMinutes, hourlyRateCents: a.worker.hourlyRateCents })),
+      rules,
+    );
     const paidCents = job.payoutBatches.flatMap((b) => b.items).filter((i) => i.status === "SUCCESS").reduce((n, i) => n + i.amountCents, 0);
     return {
       ...job,
@@ -61,8 +67,6 @@ export async function getJobs() {
     };
   });
 }
-
-const dayKey = new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE });
 
 export async function getCrew() {
   await connection();

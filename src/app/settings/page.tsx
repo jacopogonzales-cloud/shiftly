@@ -87,13 +87,13 @@ async function CompanyAndRules() {
       </Panel>
 
       <Panel id="rules" title="Rules" subtitle="Applied when the agent plans and when pay is calculated.">
-        <Row label="Overtime" hint="per shift">
+        <Row label="Overtime" hint="per working day">
           After <span className="t-number">{formatMinutes(settings.overtimeAfterMinutes)}</span> paid
         </Row>
         <Row label="Overtime multiplier">
           <span className="t-number">{settings.overtimeMultiplier.toFixed(2)}×</span>
         </Row>
-        <Row label="Minimum rest" hint="between two shifts">
+        <Row label="Minimum rest" hint="between working days">
           <span className="t-number">{settings.minRestHours}h</span>
         </Row>
         <Row label="Role match">Required · blocks conflicting assignments</Row>

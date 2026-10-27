@@ -5,7 +5,7 @@ import { logActivity } from "@/lib/activity";
 import { structured } from "@/lib/ai/openai";
 import { db } from "@/lib/db";
 import { formatEUR } from "@/lib/format";
-import { shiftPayCents } from "@/lib/pay";
+import { crewPayCents } from "@/lib/pay";
 import { checkAssignment, hasConfirmedAvailability, type Booking, type ShiftSlot, type WorkerFacts } from "@/lib/planning/constraints";
 import { loadPlanningContext } from "@/lib/planning/context";
 import { roleLabel } from "@/lib/roles";
@@ -123,7 +123,7 @@ export async function planJob(jobId: number): Promise<PlanResult> {
 
   // Re-check every pick in order, including against picks already accepted in this run.
   const bookings: Booking[] = [...ctx.bookings];
-  const accepted: { shiftId: number; workerId: number; reason: string; plannedMinutes: number; source: "agent" | "rules" }[] = [];
+  const accepted: { shiftId: number; workerId: number; day: string; reason: string; plannedMinutes: number; source: "agent" | "rules" }[] = [];
   let unfilled = 0;
   const unfilledNotes: string[] = [];
 
@@ -136,7 +136,7 @@ export async function planJob(jobId: number): Promise<PlanResult> {
       return checkAssignment({ worker: w, shift: o.slot, bookings, minRestHours: ctx.minRestHours, dayKey: romeDayKey }).length === 0;
     };
     const take = (workerId: number, reason: string, source: "agent" | "rules") => {
-      accepted.push({ shiftId: o.shift.id, workerId, reason: reason.slice(0, 200), plannedMinutes: minutes, source });
+      accepted.push({ shiftId: o.shift.id, workerId, day: romeDayKey(o.shift.startsAt), reason: reason.slice(0, 200), plannedMinutes: minutes, source });
       bookings.push({ assignmentId: -accepted.length, workerId, shiftId: o.shift.id, start: o.slot.start, end: o.slot.end });
     };
 
@@ -167,7 +167,10 @@ export async function planJob(jobId: number): Promise<PlanResult> {
     }
   }
 
-  const costCents = accepted.reduce((n, a) => n + shiftPayCents(a.plannedMinutes, rateOf.get(a.workerId) ?? 0, ctx.rules), 0);
+  const costCents = crewPayCents(
+    accepted.map((a) => ({ workerId: a.workerId, day: a.day, minutes: a.plannedMinutes, hourlyRateCents: rateOf.get(a.workerId) ?? 0 })),
+    ctx.rules,
+  );
   const people = new Set(accepted.map((a) => a.workerId)).size;
   // Figures come from code, never from the model.
   const facts = `${accepted.length} assignments for ${people} ${people === 1 ? "person" : "people"}, planned ${formatEUR(costCents)}${job.budgetCents > 0 ? ` of ${formatEUR(job.budgetCents)} budget` : ""}.`;
