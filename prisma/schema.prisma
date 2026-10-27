@@ -1,0 +1,172 @@
+// Shiftly data model. Money is always integer cents (EUR); durations are integer minutes.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  MONTATORE
+  ELETTRICISTA
+  RIGGER
+  AUTISTA
+}
+
+enum JobStatus {
+  PLANNING
+  CREW_CONFIRMED
+  IN_PROGRESS
+  DONE
+  PAID
+}
+
+enum AssignmentStatus {
+  PROPOSED
+  SENT
+  CONFIRMED
+  DECLINED
+}
+
+enum Actor {
+  operator
+  agent
+  paypal
+}
+
+model Worker {
+  id              Int            @id @default(autoincrement())
+  name            String
+  role            Role
+  hourlyRateCents Int
+  paypalEmail     String         @unique
+  phone           String?
+  reliability     Int            @default(80) // 0-100
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  assignments     Assignment[]
+  availability    Availability[]
+  payoutItems     PayoutItem[]
+}
+
+model Job {
+  id               Int           @id @default(autoincrement())
+  title            String
+  client           String
+  site             String
+  startsAt         DateTime
+  endsAt           DateTime
+  status           JobStatus     @default(PLANNING)
+  budgetCents      Int
+  requirementsText String?
+  requirements     Json?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  shifts           Shift[]
+  payoutBatches    PayoutBatch[]
+  activity         ActivityLog[]
+
+  @@index([status])
+  @@index([startsAt])
+}
+
+model Shift {
+  id          Int          @id @default(autoincrement())
+  jobId       Int
+  job         Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  startsAt    DateTime
+  endsAt      DateTime
+  role        Role
+  headcount   Int          @default(1)
+  notes       String?
+  assignments Assignment[]
+
+  @@index([jobId])
+}
+
+model Assignment {
+  id             Int              @id @default(autoincrement())
+  shiftId        Int
+  shift          Shift            @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  workerId       Int
+  worker         Worker           @relation(fields: [workerId], references: [id])
+  status         AssignmentStatus @default(PROPOSED)
+  plannedMinutes Int
+  actualMinutes  Int?
+  reason         String?
+  token          String           @unique
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([shiftId, workerId])
+  @@index([workerId])
+}
+
+model Availability {
+  id        Int      @id @default(autoincrement())
+  workerId  Int
+  worker    Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  available Boolean
+
+  @@unique([workerId, date])
+}
+
+model PayoutBatch {
+  id            Int          @id @default(autoincrement())
+  jobId         Int
+  job           Job          @relation(fields: [jobId], references: [id])
+  senderBatchId String       @unique
+  paypalBatchId String?      @unique
+  status        String       @default("DRAFT") // DRAFT, then PayPal batch_status (PENDING, PROCESSING, SUCCESS, DENIED, ...)
+  totalCents    Int
+  createdBy     Actor
+  approvedAt    DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  items         PayoutItem[]
+
+  @@index([jobId])
+}
+
+model PayoutItem {
+  id           Int         @id @default(autoincrement())
+  batchId      Int
+  batch        PayoutBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  workerId     Int
+  worker       Worker      @relation(fields: [workerId], references: [id])
+  amountCents  Int
+  senderItemId String      @unique
+  paypalItemId String?     @unique
+  status       String      @default("DRAFT") // DRAFT, then PayPal transaction_status
+  errorMessage String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([workerId])
+}
+
+model ActivityLog {
+  id        Int      @id @default(autoincrement())
+  jobId     Int?
+  job       Job?     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  actor     Actor
+  type      String
+  message   String
+  data      Json?
+  createdAt DateTime @default(now())
+
+  @@index([jobId, createdAt])
+}
+
+model Settings {
+  id                   Int    @id @default(1)
+  companyName          String
+  overtimeAfterMinutes Int    @default(480)
+  overtimeMultiplier   Float  @default(1.25)
+  minRestHours         Int    @default(11)
+}
