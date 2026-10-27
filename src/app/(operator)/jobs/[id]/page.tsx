@@ -1,14 +1,16 @@
-import { CalendarDays, CircleAlert, MapPin, Building2 } from "lucide-react";
+import { ArrowUpRight, Building2, CalendarDays, CircleAlert, ClipboardCheck, MapPin } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
-import { Breadcrumb, buttonClass, Card, JobStatusPill, Pill, Skeleton } from "@/components/ui";
+import { Avatar, Breadcrumb, buttonClass, Card, JobStatusPill, Pill, Skeleton, type Severity } from "@/components/ui";
 import type { ActivityLog } from "@/generated/prisma/client";
 import { formatDateRange, formatDay, formatEUR, formatMinutes, formatTime, jobRef } from "@/lib/format";
+import { jobInvitations } from "@/lib/invitations/invitations";
 import { getJobDetail, type JobDetail } from "@/lib/job-detail";
 import { roleLabel } from "@/lib/roles";
 import { addDays, romeDateTime } from "@/lib/time";
-import { PlanButton } from "./agent-actions";
+import { CopyLinkButton, PlanButton, SendRequestsButton, StartJobButton } from "./agent-actions";
 import { CrewSchedule, SchedulerSkeleton } from "./crew-schedule";
 
 export const metadata: Metadata = { title: "Job" };
@@ -27,6 +29,7 @@ async function JobView({ params }: { params: Promise<{ id: string }> }) {
   if (!Number.isInteger(jobId) || jobId <= 0) notFound();
   const detail = await getJobDetail(jobId);
   if (!detail) notFound();
+  const invitations = await jobInvitations(jobId);
 
   const { job, summary } = detail;
   const canPlan = job.status === "PLANNING" && summary.open > 0;
@@ -101,8 +104,11 @@ async function JobView({ params }: { params: Promise<{ id: string }> }) {
       )}
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px] wide:grid-cols-[minmax(0,1fr)_320px]">
-        <ShiftsAndHours detail={detail} />
-        <AgentPanel detail={detail} canPlan={canPlan} />
+        <div className="min-w-0 space-y-6">
+          {invitations.some((i) => i.status !== "not-sent") && <Invitations invitations={invitations} />}
+          <ShiftsAndHours detail={detail} />
+        </div>
+        <AgentPanel detail={detail} canPlan={canPlan} awaiting={invitations.filter((i) => i.status === "awaiting").length} />
       </div>
     </>
   );
@@ -193,6 +199,9 @@ const ENTRY_TITLE: Record<string, string> = {
   "plan.rebalanced": "Crew rebalanced",
   "assignment.moved": "Shift reassigned",
   "requests.sent": "Invitations sent",
+  "invitation.accepted": "Invitation accepted",
+  "invitation.declined": "Invitation declined",
+  "hours.saved": "Hours saved",
   "crew.confirmed": "Crew confirmed",
   "job.started": "Job started",
   "hours.reconciled": "Hours reconciled",
@@ -202,10 +211,9 @@ const ENTRY_TITLE: Record<string, string> = {
   "job.paid": "Job paid",
 };
 
-function AgentPanel({ detail, canPlan }: { detail: JobDetail; canPlan: boolean }) {
-  const { job, summary } = detail;
+function AgentPanel({ detail, canPlan, awaiting }: { detail: JobDetail; canPlan: boolean; awaiting: number }) {
+  const { job } = detail;
   const entries = job.activity;
-  const sendBlocked = summary.conflicts > 0 ? `Resolve ${summary.conflicts} ${summary.conflicts === 1 ? "conflict" : "conflicts"} first.` : summary.proposed === 0 ? "Nothing proposed to send." : "Invitations are not switched on yet.";
 
   return (
     <aside aria-label="Agent" className="border-line bg-surface rounded-[var(--radius-lg)] border border-l-2 px-5 py-5 lg:sticky lg:top-6">
@@ -226,24 +234,109 @@ function AgentPanel({ detail, canPlan }: { detail: JobDetail; canPlan: boolean }
       )}
 
       <div className="border-line mt-5 space-y-2 border-t pt-5">
-        {canPlan ? (
-          <PlanButton jobId={job.id} wide label={summary.filled > 0 ? "Fill open slots" : "Plan with AI"} />
-        ) : job.status === "PLANNING" ? (
-          <>
-            <button type="button" disabled aria-disabled="true" className={`${buttonClass.primary} bg-neutral-bg text-neutral-fg h-12 w-full cursor-not-allowed hover:bg-[var(--neutral-bg)]`}>
-              Send availability requests
-            </button>
-            <p className="text-ink-muted text-center text-[12px]">{sendBlocked}</p>
-          </>
-        ) : null}
+        <NextAction detail={detail} canPlan={canPlan} awaiting={awaiting} />
       </div>
     </aside>
   );
 }
 
+function Disabled({ label, note }: { label: string; note: string }) {
+  return (
+    <>
+      <button type="button" disabled aria-disabled="true" className={`${buttonClass.primary} bg-neutral-bg text-neutral-fg h-12 w-full cursor-not-allowed hover:bg-[var(--neutral-bg)]`}>
+        {label}
+      </button>
+      <p className="text-ink-muted text-center text-[12px]">{note}</p>
+    </>
+  );
+}
+
+/** The one next step for this job, in lifecycle order. */
+function NextAction({ detail, canPlan, awaiting }: { detail: JobDetail; canPlan: boolean; awaiting: number }) {
+  const { job, summary } = detail;
+  if (job.status === "PLANNING") {
+    if (summary.proposed > 0 && summary.conflicts > 0) return <Disabled label="Send availability requests" note={`Resolve ${summary.conflicts} ${summary.conflicts === 1 ? "conflict" : "conflicts"} first.`} />;
+    if (summary.proposed > 0) return <SendRequestsButton jobId={job.id} count={summary.proposed} />;
+    if (canPlan) return <PlanButton jobId={job.id} wide label={summary.filled > 0 ? "Fill open slots" : "Plan with AI"} />;
+    if (awaiting > 0) return <Disabled label="Waiting for answers" note={`${awaiting} ${awaiting === 1 ? "person hasn't" : "people haven't"} answered yet.`} />;
+    return null;
+  }
+  if (job.status === "CREW_CONFIRMED") return <StartJobButton jobId={job.id} />;
+  if (job.status === "IN_PROGRESS")
+    return (
+      <Link href={`/jobs/${job.id}/hours`} className={`${buttonClass.primary} h-12 w-full`}>
+        <ClipboardCheck size={18} aria-hidden="true" /> Close shifts
+      </Link>
+    );
+  if (job.status === "DONE") return <Disabled label="Review payouts" note="Payouts are not switched on yet." />;
+  return null;
+}
+
+const INVITE_STATE: Record<string, { severity: Severity; label: string }> = {
+  "not-sent": { severity: "neutral", label: "Not sent" },
+  awaiting: { severity: "info", label: "Awaiting response" },
+  accepted: { severity: "success", label: "Accepted" },
+  declined: { severity: "error", label: "Declined" },
+  inactive: { severity: "neutral", label: "Withdrawn" },
+};
+
+function Invitations({ invitations }: { invitations: Awaited<ReturnType<typeof jobInvitations>> }) {
+  const order = { awaiting: 0, declined: 1, "not-sent": 2, accepted: 3, inactive: 4 };
+  const rows = [...invitations].sort((a, b) => order[a.status] - order[b.status] || a.name.localeCompare(b.name));
+  const answered = invitations.filter((i) => i.status === "accepted" || i.status === "declined").length;
+  const sent = invitations.filter((i) => i.status !== "not-sent").length;
+  return (
+    <Card>
+      <div className="border-line flex items-center justify-between gap-4 border-b px-6 py-[18px]">
+        <div>
+          <h2 className="t-h3">Invitations</h2>
+          <p className="text-ink-muted t-small font-medium">No email is sent in this demo: open a link to answer as that person.</p>
+        </div>
+        <p className="text-ink-muted t-small font-medium whitespace-nowrap">
+          {answered} of {sent} answered
+        </p>
+      </div>
+      <ul>
+        {rows.map((i) => {
+          const st = INVITE_STATE[i.status];
+          return (
+            <li key={i.workerId} className="border-line flex min-h-[58px] items-center gap-3 border-b px-6 py-2 last:border-b-0">
+              <Avatar name={i.name} role={i.role} />
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-bold">{i.name}</p>
+                <p className="text-ink-muted text-[11px]">
+                  {roleLabel[i.role]} · {i.shifts} {i.shifts === 1 ? "shift" : "shifts"}
+                  {i.pending > 0 && i.status !== "not-sent" ? ` · ${i.pending} new, not sent` : ""}
+                  {i.declineReason ? ` · ${i.declineReason}` : ""}
+                </p>
+              </div>
+              <Pill severity={st.severity}>{st.label}</Pill>
+              {i.link ? (
+                <div className="flex items-center">
+                  <a
+                    href={i.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-ink-secondary hover:bg-surface-hover hover:text-ink inline-flex h-10 items-center gap-1 rounded-[10px] px-2.5 text-[12px] font-bold"
+                  >
+                    Open link <ArrowUpRight size={14} aria-hidden="true" />
+                  </a>
+                  <CopyLinkButton path={i.link} />
+                </div>
+              ) : (
+                <span className="w-[134px]" />
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
+}
+
 function AgentEntry({ entry, latest }: { entry: ActivityLog; latest: boolean }) {
   const title = ENTRY_TITLE[entry.type] ?? entry.type;
-  const actor: Record<string, ReactNode> = { agent: "Agent", operator: "You", paypal: "PayPal" };
+  const actor: Record<string, ReactNode> = { agent: "Agent", operator: "You", paypal: "PayPal", crew: "Crew" };
   const data = (entry.data ?? {}) as { agentAvailable?: boolean; seed?: boolean };
   return (
     <li className="relative pl-6">

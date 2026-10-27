@@ -7,10 +7,12 @@ import type { Role } from "@/generated/prisma/enums";
 import { logActivity } from "@/lib/activity";
 import { AIError } from "@/lib/ai/openai";
 import { extractJob, type ExtractedJob } from "@/lib/ai/extract";
+import { writeInvitations } from "@/lib/ai/invite";
 import { db } from "@/lib/db";
 import { formatDay } from "@/lib/format";
 import { EDITABLE_STATUSES } from "@/lib/job-detail";
 import { checkAssignment } from "@/lib/planning/constraints";
+import { roleLabel } from "@/lib/roles";
 import { loadPlanningContext } from "@/lib/planning/context";
 import { planJob } from "@/lib/planning/plan";
 import { romeDateTime, romeDayKey } from "@/lib/time";
@@ -182,4 +184,71 @@ export async function moveAssignmentAction(assignmentId: number, toWorkerId: num
   });
   refresh();
   return { ok: true, message: `${to} now has this shift. Proposed, not sent.` };
+}
+
+/** PROPOSED → SENT for everyone, with an AI-written request each. No email: the links are shown on the job page. */
+export async function sendRequestsAction(jobId: number): Promise<ActionResult> {
+  const job = await db().job.findUnique({
+    where: { id: jobId },
+    include: { shifts: { include: { assignments: { where: { status: "PROPOSED" }, include: { worker: { select: { name: true, role: true } } } } } } },
+  });
+  if (!job) return { ok: false, message: "Job not found." };
+  if (job.status !== "PLANNING") return { ok: false, message: "Requests can only be sent while the job is in Planning." };
+  const proposed = job.shifts.flatMap((s) => s.assignments.map((a) => ({ ...a, shift: s })));
+  if (proposed.length === 0) return { ok: false, message: "Nothing proposed to send." };
+
+  const ctx = await loadPlanningContext(job.startsAt, job.endsAt);
+  const conflicts = proposed.filter((a) => {
+    const worker = ctx.facts.find((w) => w.id === a.workerId);
+    const slot = { shiftId: a.shiftId, role: a.shift.role, start: a.shift.startsAt.getTime(), end: a.shift.endsAt.getTime() };
+    return !worker || checkAssignment({ worker, shift: slot, bookings: ctx.bookings, minRestHours: ctx.minRestHours, dayKey: romeDayKey, ignoreAssignmentId: a.id }).length > 0;
+  }).length;
+  if (conflicts > 0) return { ok: false, message: `Resolve ${conflicts} ${conflicts === 1 ? "conflict" : "conflicts"} before sending.` };
+
+  const byWorker = new Map<number, typeof proposed>();
+  for (const a of proposed) byWorker.set(a.workerId, [...(byWorker.get(a.workerId) ?? []), a]);
+  const settings = await db().settings.findUnique({ where: { id: 1 }, select: { companyName: true } });
+  const company = settings?.companyName ?? "Your crew operator";
+  const messages = await writeInvitations(
+    company,
+    { title: job.title, site: job.site },
+    [...byWorker.values()].map((list) => ({
+      workerId: list[0].workerId,
+      firstName: list[0].worker.name.split(" ")[0],
+      role: roleLabel[list[0].worker.role],
+      days: [...new Set(list.map((a) => formatDay(a.shift.startsAt)))],
+    })),
+  );
+
+  const now = new Date();
+  await db().$transaction(async (tx) => {
+    for (const [workerId, list] of byWorker) {
+      await tx.assignment.updateMany({
+        where: { id: { in: list.map((a) => a.id) }, status: "PROPOSED" },
+        data: { status: "SENT", sentAt: now, inviteMessage: messages.get(workerId) },
+      });
+    }
+    await logActivity(tx, {
+      jobId,
+      actor: "operator",
+      type: "requests.sent",
+      message: `Sent availability requests to ${byWorker.size} ${byWorker.size === 1 ? "person" : "people"} for ${proposed.length} ${proposed.length === 1 ? "shift" : "shifts"}.`,
+      data: { workerIds: [...byWorker.keys()], assignments: proposed.length },
+    });
+  });
+  refresh();
+  return { ok: true, message: `${byWorker.size} requests sent. Open a link under Invitations to answer as that person.` };
+}
+
+/** Simulated clock: CREW_CONFIRMED → IN_PROGRESS. */
+export async function startJobAction(jobId: number): Promise<ActionResult> {
+  const res = await db().$transaction(async (tx) => {
+    const updated = await tx.job.updateMany({ where: { id: jobId, status: "CREW_CONFIRMED" }, data: { status: "IN_PROGRESS" } });
+    if (updated.count === 0) return false;
+    await logActivity(tx, { jobId, actor: "operator", type: "job.started", message: "Job started. Schedule locked." });
+    return true;
+  });
+  if (!res) return { ok: false, message: "Only a job with a confirmed crew can start." };
+  refresh();
+  return { ok: true, message: "Job started." };
 }
