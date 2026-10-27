@@ -6,7 +6,8 @@ import { structured } from "@/lib/ai/openai";
 import { db } from "@/lib/db";
 import { formatDay, formatEUR } from "@/lib/format";
 import { crewPayCents } from "@/lib/pay";
-import { checkAssignment, hasConfirmedAvailability, type Booking, type ShiftSlot, type WorkerFacts } from "@/lib/planning/constraints";
+import { allocate, eligibleCandidates, type OpenSlot, type Pick } from "@/lib/planning/allocate";
+import { hasConfirmedAvailability, type ShiftSlot } from "@/lib/planning/constraints";
 import { loadPlanningContext } from "@/lib/planning/context";
 import { roleLabel } from "@/lib/roles";
 import { romeDayKey, romeHHMM } from "@/lib/time";
@@ -14,7 +15,6 @@ import { romeDayKey, romeHHMM } from "@/lib/time";
 // Task (b): fill open slots. Code decides who is allowed; the model only chooses among allowed people
 // and explains why. Every pick is re-checked before it is saved.
 
-type Pick = { workerId: number; reason: string };
 type ModelPlan = { summary: string; shifts: { shiftId: number; picks: Pick[] }[] };
 
 const schema = {
@@ -61,50 +61,60 @@ function infeasibleReason(role: Role, needed: number, inCrew: number, free: numb
 
 export type PlanResult = { proposed: number; unfilled: number; summary: string };
 
-/** Rank for deterministic fallback: confirmed availability, then reliability, then lower rate. */
-function rank(a: { confirmed: boolean; reliability: number; rate: number }, b: typeof a) {
-  return Number(b.confirmed) - Number(a.confirmed) || b.reliability - a.reliability || a.rate - b.rate;
-}
+export type PlanOptions = {
+  /** Only these shifts (default: every shift with open slots). */
+  shiftIds?: number[];
+  /** Re-plan after a decline: logged as plan.rebalanced with a short who-replaces-whom message. */
+  rebalance?: { declinedWorkerId: number; declinedName: string };
+};
 
-export async function planJob(jobId: number): Promise<PlanResult> {
+export async function planJob(jobId: number, opts: PlanOptions = {}): Promise<PlanResult> {
   const job = await db().job.findUniqueOrThrow({
     where: { id: jobId },
-    include: { shifts: { orderBy: { startsAt: "asc" }, include: { assignments: { where: { status: { not: "DECLINED" } } } } } },
+    include: { shifts: { orderBy: { startsAt: "asc" }, include: { assignments: { select: { workerId: true, status: true } } } } },
   });
   const ctx = await loadPlanningContext(job.startsAt, job.endsAt);
-  const rateOf = new Map(ctx.workers.map((w) => [w.id, w.hourlyRateCents]));
-  const factsOf = new Map(ctx.facts.map((f) => [f.id, f]));
+  const rateOf = (id: number) => ctx.workers.find((w) => w.id === id)?.hourlyRateCents ?? 0;
 
-  const open = job.shifts
-    .map((s) => ({ shift: s, slot: { shiftId: s.id, role: s.role, start: s.startsAt.getTime(), end: s.endsAt.getTime() } as ShiftSlot, needed: s.headcount - s.assignments.length }))
+  // Anyone with a row on a shift (proposed, sent, confirmed or declined) is never offered it again.
+  const excluded = new Map(job.shifts.map((s) => [s.id, new Set(s.assignments.map((a) => a.workerId))]));
+  const common = { workers: ctx.facts, bookings: ctx.bookings, minRestHours: ctx.minRestHours, dayKey: romeDayKey, excluded };
+
+  const open: (OpenSlot & { shift: (typeof job.shifts)[number] })[] = job.shifts
+    .filter((s) => !opts.shiftIds || opts.shiftIds.includes(s.id))
+    .map((s) => ({
+      shift: s,
+      slot: { shiftId: s.id, role: s.role, start: s.startsAt.getTime(), end: s.endsAt.getTime() } as ShiftSlot,
+      needed: s.headcount - s.assignments.filter((a) => a.status !== "DECLINED").length,
+      minutes: Math.round((s.endsAt.getTime() - s.startsAt.getTime()) / 60_000) - s.breakMinutes,
+    }))
     .filter((o) => o.needed > 0);
 
   if (open.length === 0) return { proposed: 0, unfilled: 0, summary: "Every slot already has someone. Nothing to plan." };
 
-  // Candidates per shift against existing bookings only. The model sees just these.
-  const candidates = new Map<number, WorkerFacts[]>();
-  for (const o of open) {
-    const ok = ctx.facts.filter((w) => checkAssignment({ worker: w, shift: o.slot, bookings: ctx.bookings, minRestHours: ctx.minRestHours, dayKey: romeDayKey }).length === 0);
-    candidates.set(o.shift.id, ok);
-  }
+  // The model sees only people code already allows.
+  const candidates = new Map(open.map((o) => [o.slot.shiftId, eligibleCandidates(o.slot, common)]));
 
   const prompt = {
     job: { title: job.title, site: job.site, budgetEur: job.budgetCents / 100 },
+    situation: opts.rebalance
+      ? `${opts.rebalance.declinedName} declined these shifts. Pick replacements; prefer one person who can cover all of them.`
+      : "First plan for this job.",
     rules: {
       minRestHours: ctx.minRestHours,
       note: "Every listed candidate is already valid for that shift (role, availability, no overlap, rest). Shifts on the same day form one working day: the same person may work both the morning and the afternoon shift of a day, and that is preferred. The rest rule only applies between days. Code re-checks every pick.",
     },
     shifts: open.map((o) => ({
-      shiftId: o.shift.id,
+      shiftId: o.slot.shiftId,
       day: romeDayKey(o.shift.startsAt),
       time: `${romeHHMM(o.shift.startsAt)}-${romeHHMM(o.shift.endsAt)}`,
       role: roleLabel[o.shift.role],
       needed: o.needed,
-      candidates: (candidates.get(o.shift.id) ?? []).map((w) => ({
+      candidates: (candidates.get(o.slot.shiftId) ?? []).map((w) => ({
         workerId: w.id,
         name: w.name,
         reliability: w.reliability,
-        hourlyRateEur: (rateOf.get(w.id) ?? 0) / 100,
+        hourlyRateEur: rateOf(w.id) / 100,
         markedAvailableThatDay: hasConfirmedAvailability(w, o.slot, romeDayKey),
       })),
     })),
@@ -129,70 +139,46 @@ export async function planJob(jobId: number): Promise<PlanResult> {
     modelPlan = res.data;
     model = res.model;
   } catch (err) {
-    // The deterministic fallback below still produces a valid plan; the log says the agent was unavailable.
+    // The deterministic fallback in allocate() still produces a valid plan; the log says the agent was unavailable.
     console.error("planJob: model call failed", err);
   }
 
-  // Re-check every pick in order, including against picks already accepted in this run.
-  const bookings: Booking[] = [...ctx.bookings];
-  const accepted: { shiftId: number; workerId: number; day: string; reason: string; plannedMinutes: number; source: "agent" | "rules" }[] = [];
-  let unfilled = 0;
-  const unfilledNotes: string[] = [];
+  const picks = new Map((modelPlan?.shifts ?? []).map((s) => [s.shiftId, s.picks]));
+  const { accepted, unfilled: gaps } = allocate(open, picks, { ...common, rateOf });
+  const unfilled = gaps.reduce((n, g) => n + g.missing, 0);
 
-  for (const o of open) {
-    const minutes = Math.round((o.slot.end - o.slot.start) / 60_000) - o.shift.breakMinutes;
-    const allowed = (workerId: number) => {
-      const w = factsOf.get(workerId);
-      if (!w || !(candidates.get(o.shift.id) ?? []).some((c) => c.id === workerId)) return false;
-      if (accepted.some((a) => a.shiftId === o.shift.id && a.workerId === workerId)) return false;
-      return checkAssignment({ worker: w, shift: o.slot, bookings, minRestHours: ctx.minRestHours, dayKey: romeDayKey }).length === 0;
-    };
-    const take = (workerId: number, reason: string, source: "agent" | "rules") => {
-      accepted.push({ shiftId: o.shift.id, workerId, day: romeDayKey(o.shift.startsAt), reason: reason.slice(0, 200), plannedMinutes: minutes, source });
-      bookings.push({ assignmentId: -accepted.length, workerId, shiftId: o.shift.id, start: o.slot.start, end: o.slot.end });
-    };
-
-    let filled = 0;
-    const picks = modelPlan?.shifts.find((s) => s.shiftId === o.shift.id)?.picks ?? [];
-    for (const p of picks) {
-      if (filled >= o.needed) break;
-      if (allowed(p.workerId)) {
-        take(p.workerId, p.reason, "agent");
-        filled++;
-      }
-    }
-
-    const backups = (candidates.get(o.shift.id) ?? [])
-      .map((w) => ({ w, confirmed: hasConfirmedAvailability(w, o.slot, romeDayKey), reliability: w.reliability, rate: rateOf.get(w.id) ?? 0 }))
-      .sort(rank);
-    for (const b of backups) {
-      if (filled >= o.needed) break;
-      if (allowed(b.w.id)) {
-        take(b.w.id, `Qualified and free; reliability ${b.reliability}${b.confirmed ? ", marked available that day" : ""}.`, "rules");
-        filled++;
-      }
-    }
-
-    if (filled < o.needed) {
-      unfilled += o.needed - filled;
-      unfilledNotes.push(infeasibleReason(o.shift.role, o.shift.headcount, ctx.facts.filter((w) => w.role === o.shift.role).length, (candidates.get(o.shift.id) ?? []).length, o.shift.startsAt));
-    }
-  }
-
+  const dayOf = new Map(open.map((o) => [o.slot.shiftId, romeDayKey(o.shift.startsAt)]));
   const costCents = crewPayCents(
-    accepted.map((a) => ({ workerId: a.workerId, day: a.day, minutes: a.plannedMinutes, hourlyRateCents: rateOf.get(a.workerId) ?? 0 })),
+    accepted.map((a) => ({ workerId: a.workerId, day: dayOf.get(a.shiftId)!, minutes: a.plannedMinutes, hourlyRateCents: rateOf(a.workerId) })),
     ctx.rules,
   );
   const people = new Set(accepted.map((a) => a.workerId)).size;
-  // Figures come from code, never from the model.
   const totalSlots = open.reduce((n, o) => n + o.needed, 0);
-  const facts = `${accepted.length} assignments for ${people} ${people === 1 ? "person" : "people"}, planned ${formatEUR(costCents)}${job.budgetCents > 0 ? ` of ${formatEUR(job.budgetCents)} budget` : ""}.`;
-  const why = modelPlan?.summary?.trim() || "Agent offline: ranked by availability and reliability.";
-  // Infeasible plans get a short, actionable message instead of the model's paragraph.
-  const summary =
-    unfilled > 0
-      ? `${[...new Set(unfilledNotes)].slice(0, 2).join(" ")} Filled ${accepted.length} of ${totalSlots} slots.`
-      : `${why} ${facts}`;
+  const gapNotes = [
+    ...new Set(
+      gaps.map((g) => {
+        const o = open.find((x) => x.slot.shiftId === g.shiftId)!;
+        return infeasibleReason(o.shift.role, o.shift.headcount, ctx.facts.filter((w) => w.role === o.shift.role).length, g.candidates, o.shift.startsAt);
+      }),
+    ),
+  ].slice(0, 2);
+
+  // Figures and names come from code; the model contributes only the "why".
+  let summary: string;
+  if (opts.rebalance) {
+    const first = (name: string) => name.split(" ")[0];
+    const who = [...new Set(accepted.map((a) => ctx.workers.find((w) => w.id === a.workerId)!.name))].map(first);
+    const days = [...new Set(open.map((o) => formatDay(o.shift.startsAt)))].join(", ");
+    const lead = `${first(opts.rebalance.declinedName)} declined ${days}.`;
+    summary =
+      unfilled > 0
+        ? `${lead} ${gapNotes.join(" ")}${accepted.length ? ` Proposed ${who.join(", ")} for ${accepted.length} of ${totalSlots} slots.` : ""}`
+        : `${lead} ${who.join(" and ")} ${who.length === 1 ? "takes" : "take"} over: ${accepted[0]?.reason ?? ""} Proposed, not sent.`;
+  } else {
+    const facts = `${accepted.length} assignments for ${people} ${people === 1 ? "person" : "people"}, planned ${formatEUR(costCents)}${job.budgetCents > 0 ? ` of ${formatEUR(job.budgetCents)} budget` : ""}.`;
+    const why = modelPlan?.summary?.trim() || "Agent offline: ranked by availability and reliability.";
+    summary = unfilled > 0 ? `${gapNotes.join(" ")} Filled ${accepted.length} of ${totalSlots} slots.` : `${why} ${facts}`;
+  }
 
   await db().$transaction(async (tx) => {
     for (const a of accepted) {
@@ -203,7 +189,7 @@ export async function planJob(jobId: number): Promise<PlanResult> {
     await logActivity(tx, {
       jobId,
       actor: "agent",
-      type: "plan.proposed",
+      type: opts.rebalance ? "plan.rebalanced" : "plan.proposed",
       message: summary,
       data: {
         model,
@@ -212,11 +198,12 @@ export async function planJob(jobId: number): Promise<PlanResult> {
         people,
         unfilled,
         plannedCostCents: costCents,
+        declinedWorkerId: opts.rebalance?.declinedWorkerId ?? null,
         picks: accepted.map((a) => ({ shiftId: a.shiftId, workerId: a.workerId, source: a.source })),
       },
     });
   });
 
-  console.info(`planJob ${jobId}: ${accepted.length} proposed, ${unfilled} unfilled, planned ${formatEUR(costCents)}, agent ${model ? "used" : "offline"}`);
+  console.info(`planJob ${jobId}${opts.rebalance ? " (rebalance)" : ""}: ${accepted.length} proposed, ${unfilled} unfilled, agent ${model ? "used" : "offline"}`);
   return { proposed: accepted.length, unfilled, summary };
 }

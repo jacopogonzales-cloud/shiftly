@@ -35,6 +35,7 @@ enum Actor {
   operator
   agent
   paypal
+  crew // a freelancer answering an invitation
 }
 
 model Worker {
@@ -99,7 +100,11 @@ model Assignment {
   plannedMinutes Int
   actualMinutes  Int?
   reason         String?
-  token          String           @unique
+  token          String           @unique // rotated on reassignment, so older links stop working
+  inviteMessage  String?
+  sentAt         DateTime?
+  respondedAt    DateTime?
+  declineReason  String?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
