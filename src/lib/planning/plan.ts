@@ -4,7 +4,7 @@ import type { Role } from "@/generated/prisma/enums";
 import { logActivity } from "@/lib/activity";
 import { structured } from "@/lib/ai/openai";
 import { db } from "@/lib/db";
-import { formatEUR } from "@/lib/format";
+import { formatDay, formatEUR } from "@/lib/format";
 import { crewPayCents } from "@/lib/pay";
 import { checkAssignment, hasConfirmedAvailability, type Booking, type ShiftSlot, type WorkerFacts } from "@/lib/planning/constraints";
 import { loadPlanningContext } from "@/lib/planning/context";
@@ -50,6 +50,14 @@ const schema = {
 };
 
 const token = () => randomBytes(16).toString("base64url");
+
+const plural = (role: Role, n: number) => `${roleLabel[role]}${n === 1 ? "" : "s"}`;
+
+/** One sentence the operator can act on: not enough people of a role at all, or not enough free that day. */
+function infeasibleReason(role: Role, needed: number, inCrew: number, free: number, day: Date): string {
+  if (inCrew < needed) return `Your crew has ${inCrew} ${plural(role, inCrew)}; this job needs ${needed} per shift. Reduce headcount or add crew.`;
+  return `Only ${free} of ${inCrew} ${plural(role, inCrew)} are free on ${formatDay(day)}. Reduce headcount, move the date or add crew.`;
+}
 
 export type PlanResult = { proposed: number; unfilled: number; summary: string };
 
@@ -163,7 +171,7 @@ export async function planJob(jobId: number): Promise<PlanResult> {
 
     if (filled < o.needed) {
       unfilled += o.needed - filled;
-      unfilledNotes.push(`${o.needed - filled} ${roleLabel[o.shift.role as Role].toLowerCase()} on ${romeDayKey(o.shift.startsAt)}`);
+      unfilledNotes.push(infeasibleReason(o.shift.role, o.shift.headcount, ctx.facts.filter((w) => w.role === o.shift.role).length, (candidates.get(o.shift.id) ?? []).length, o.shift.startsAt));
     }
   }
 
@@ -173,9 +181,14 @@ export async function planJob(jobId: number): Promise<PlanResult> {
   );
   const people = new Set(accepted.map((a) => a.workerId)).size;
   // Figures come from code, never from the model.
+  const totalSlots = open.reduce((n, o) => n + o.needed, 0);
   const facts = `${accepted.length} assignments for ${people} ${people === 1 ? "person" : "people"}, planned ${formatEUR(costCents)}${job.budgetCents > 0 ? ` of ${formatEUR(job.budgetCents)} budget` : ""}.`;
   const why = modelPlan?.summary?.trim() || "Agent offline: ranked by availability and reliability.";
-  const summary = `${why} ${facts}` + (unfilled > 0 ? ` Unfilled: ${unfilledNotes.join(", ")}.` : "");
+  // Infeasible plans get a short, actionable message instead of the model's paragraph.
+  const summary =
+    unfilled > 0
+      ? `${[...new Set(unfilledNotes)].slice(0, 2).join(" ")} Filled ${accepted.length} of ${totalSlots} slots.`
+      : `${why} ${facts}`;
 
   await db().$transaction(async (tx) => {
     for (const a of accepted) {

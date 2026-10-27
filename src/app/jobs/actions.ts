@@ -130,7 +130,8 @@ export async function planJobAction(jobId: number): Promise<ActionResult> {
   try {
     const res = await planJob(jobId);
     refresh();
-    return { ok: true, message: res.proposed === 0 && res.unfilled === 0 ? res.summary : `${res.proposed} assignments proposed${res.unfilled ? `, ${res.unfilled} slots unfilled` : ""}. Review before sending.` };
+    if (res.unfilled > 0) return { ok: false, message: res.summary };
+    return { ok: true, message: res.proposed === 0 ? res.summary : `${res.proposed} assignments proposed. Review before sending.` };
   } catch (err) {
     console.error("planJobAction", err);
     return { ok: false, message: "Couldn't build a plan. Nothing was saved." };
