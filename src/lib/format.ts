@@ -1,15 +1,12 @@
-// Display formatting per docs/design-system.md: amounts "€ 1.234,50", times "08:00–16:30".
+// Display formatting per docs/design/design-system.md §03: amounts "1.234,50 €", times "08:00–17:00" (Europe/Rome).
 
 export const TIME_ZONE = "Europe/Rome";
 
-const amount = new Intl.NumberFormat("it-IT", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-  useGrouping: "always",
-});
+// it-IT skips grouping for 4-digit numbers by default; the design wants "1.234,50 €".
+const amount = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" });
 
 export function formatEUR(cents: number): string {
-  return `€ ${amount.format(cents / 100)}`;
+  return amount.format(cents / 100);
 }
 
 const time = new Intl.DateTimeFormat("en-GB", {
@@ -74,6 +71,17 @@ export function formatMinutes(minutes: number): string {
   return m === 0 ? `${h}h` : `${h}h ${String(m).padStart(2, "0")}m`;
 }
 
-export function titleCase(value: string): string {
-  return value.charAt(0) + value.slice(1).toLowerCase().replaceAll("_", " ");
+export function initials(name: string): string {
+  const words = name.trim().split(/\s+/);
+  return ((words[0]?.[0] ?? "") + (words.length > 1 ? words[words.length - 1][0] : "")).toUpperCase();
+}
+
+/** "m***@example.com", for payout lists that may be screen-shared. */
+export function maskEmail(email: string): string {
+  const [user, domain] = email.split("@");
+  return `${user.charAt(0)}***@${domain ?? ""}`;
+}
+
+export function jobRef(id: number): string {
+  return `J-${String(id).padStart(4, "0")}`;
 }

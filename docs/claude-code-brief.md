@@ -8,7 +8,7 @@
 
 A web app for a small operator who runs on-call crews (event setups, catering, removals). An AI agent plans shifts on a **Bryntum Scheduler**, collects availability, reconciles planned vs actual hours, computes pay, and pays freelancers through **PayPal Payouts** (sandbox) after explicit human approval. Entry for the PayPal AI Hackathon 2026 (targets: Best Use of Agentic Commerce / Most Impactful + Bryntum sponsor prize + APIMatic prize + Render).
 
-Read `docs/design-system.md` before writing any UI. Follow it.
+Read the design handoff in `docs/design/` before writing any UI: `design-system.md` (tokens, type, components, Bryntum theming contract), `screens.md` (layouts and states per screen), `mockups/*.png`, and `assets/*.svg` (mark, wordmark, favicon). Follow it. The light theme there is the only theme. Keep the app's own data model and seed data; the handoff's demo figures are layout references only.
 
 ## Hard rules
 
@@ -29,7 +29,7 @@ Read `docs/design-system.md` before writing any UI. Follow it.
   ```
   npm install @bryntum/scheduler@npm:@bryntum/scheduler-trial @bryntum/scheduler-react
   ```
-  (`@bryntum/scheduler-react` imports from `@bryntum/scheduler`, hence the alias; current version 7.3.x.) Render it in a client component (`'use client'`) loaded with `next/dynamic({ ssr: false })`. CSS: `@bryntum/scheduler/scheduler.css` + the Svalbard dark theme, imported once in the scheduler component.
+  (`@bryntum/scheduler-react` imports from `@bryntum/scheduler`, hence the alias; current version 7.3.x.) Render it in a client component (`'use client'`) loaded with `next/dynamic({ ssr: false })`. CSS: `@bryntum/scheduler/scheduler.css` + the Svalbard light theme, imported once in the scheduler component and themed per `docs/design/design-system.md` §06.
 - OpenAI: three structured tasks — (a) extract job requirements from free text, (b) propose assignments given candidates + constraints (hard constraints checked by deterministic code, never trusted to the model), (c) write availability requests and explanations.
 
 ## Milestone 0 — Payouts gate (do this first, nothing else)

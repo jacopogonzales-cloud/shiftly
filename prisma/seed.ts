@@ -3,6 +3,7 @@
 import { randomBytes } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, type Role, type Worker } from "../src/generated/prisma/client";
+import { shiftPayCents } from "../src/lib/pay";
 import { pgConfig } from "../src/lib/pg-config";
 
 const prisma = new PrismaClient({ adapter: new PrismaPg(pgConfig(process.env.DATABASE_URL)) });
@@ -58,11 +59,8 @@ function romeWeekday(): number {
 const token = () => randomBytes(16).toString("base64url");
 const minutesBetween = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / 60_000);
 
-function payCents(minutes: number, hourlyRateCents: number): number {
-  const regular = Math.min(minutes, OVERTIME_AFTER);
-  const overtime = Math.max(0, minutes - OVERTIME_AFTER);
-  return Math.round(((regular + overtime * OVERTIME_MULTIPLIER) * hourlyRateCents) / 60);
-}
+const payCents = (minutes: number, hourlyRateCents: number) =>
+  shiftPayCents(minutes, hourlyRateCents, { overtimeAfterMinutes: OVERTIME_AFTER, overtimeMultiplier: OVERTIME_MULTIPLIER });
 
 // --- data ------------------------------------------------------------------
 

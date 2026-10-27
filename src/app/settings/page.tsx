@@ -1,104 +1,162 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Suspense } from "react";
-import { Card, EmptyState, PageHeader } from "@/components/ui";
-import { formatMinutes } from "@/lib/format";
-import { getSettings } from "@/lib/queries";
+import { Card, CardHeader, EmptyState, PageHeader, Pill, RoleTag, Skeleton } from "@/components/ui";
+import { formatEUR, formatMinutes } from "@/lib/format";
+import { getRoleRates, getSettings, paypalCredentialsConfigured } from "@/lib/queries";
 
 export const metadata: Metadata = { title: "Settings" };
+
+const SECTIONS = [
+  { id: "company", label: "Company" },
+  { id: "rates", label: "Rates" },
+  { id: "rules", label: "Rules" },
+  { id: "paypal", label: "PayPal" },
+];
 
 export default function SettingsPage() {
   return (
     <>
-      <PageHeader title="Settings">
-        <span className="label">Read-only</span>
-      </PageHeader>
-      <Suspense
-        fallback={
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div className="skeleton h-[220px] rounded-card" />
-            <div className="skeleton h-[220px] rounded-card" />
-          </div>
-        }
-      >
-        <SettingsPanels />
-      </Suspense>
+      <PageHeader eyebrow="Workspace / Settings" title="Settings" subtitle="How your team plans work and pays people." />
+      <div className="grid gap-6 lg:grid-cols-[180px_minmax(0,1fr)] wide:grid-cols-[240px_minmax(0,1fr)]">
+        <nav aria-label="Settings sections" className="lg:sticky lg:top-6 lg:self-start">
+          <ul className="flex gap-1.5 overflow-x-auto lg:flex-col">
+            {SECTIONS.map((s) => (
+              <li key={s.id}>
+                <a
+                  href={`#${s.id}`}
+                  className="text-ink-secondary hover:bg-surface-hover hover:text-ink flex h-11 items-center rounded-[10px] px-4 text-[13px] font-bold whitespace-nowrap transition-colors duration-[var(--duration-fast)]"
+                >
+                  {s.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        <div className="min-w-0 space-y-6">
+          <Suspense fallback={<PanelSkeleton rows={4} />}>
+            <CompanyAndRules />
+          </Suspense>
+          <Suspense fallback={<PanelSkeleton rows={3} />}>
+            <PaypalPanel />
+          </Suspense>
+        </div>
+      </div>
     </>
   );
 }
 
-async function SettingsPanels() {
-  const settings = await getSettings();
+async function CompanyAndRules() {
+  const [settings, rates] = await Promise.all([getSettings(), getRoleRates()]);
 
   if (!settings) {
     return (
-      <EmptyState
-        title="No company set up"
-        icon={
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-            <path d="M4 20V8l8-4 8 4v12M9 20v-5h6v5" />
-          </svg>
-        }
-      >
-        Run the seed to create the company profile and pay rules: <span className="num text-text">npm run db:seed</span>
+      <EmptyState title="No company set up">
+        Run the seed to create the company profile and pay rules: <span className="t-number text-ink">npm run db:seed</span>
       </EmptyState>
     );
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <Panel title="Company">
-        <Row label="Name">{settings.companyName}</Row>
-        <Row label="Time zone">
-          <span className="num">Europe/Rome</span>
+    <>
+      <Panel id="company" title="Company" subtitle="Who appears on invitations and payouts.">
+        <Row label="Company name">{settings.companyName}</Row>
+        <Row label="Base">Milano, Italy</Row>
+        <Row label="Currency" hint="Fixed for existing payout batches">
+          <span className="t-number">EUR</span>
         </Row>
-        <Row label="Currency">
-          <span className="num">EUR</span>
+        <Row label="Time zone">
+          <span className="t-number">Europe/Rome</span>
         </Row>
       </Panel>
 
-      <Panel title="Pay and rest rules">
-        <Row label="Overtime after" hint="per shift">
-          <span className="num">{formatMinutes(settings.overtimeAfterMinutes)}</span>
+      <Panel id="rates" title="Rates" subtitle="Individual rates are set per person in Crew. These are the current ranges.">
+        {rates.length === 0 ? (
+          <p className="text-ink-muted px-6 py-5 text-[14px]">No crew yet, so no rates.</p>
+        ) : (
+          rates.map((r) => (
+            <Row key={r.role} label={<RoleTag role={r.role} />} hint={`${r.count} ${r.count === 1 ? "person" : "people"}`}>
+              <span className="t-number">
+                {r.min === r.max ? formatEUR(r.min) : `${formatEUR(r.min)} – ${formatEUR(r.max)}`}
+                <span className="text-ink-muted">/h</span>
+              </span>
+            </Row>
+          ))
+        )}
+      </Panel>
+
+      <Panel id="rules" title="Rules" subtitle="Applied when the agent plans and when pay is calculated.">
+        <Row label="Overtime" hint="per shift">
+          After <span className="t-number">{formatMinutes(settings.overtimeAfterMinutes)}</span> paid
         </Row>
-        <Row label="Overtime rate">
-          <span className="num">×{settings.overtimeMultiplier.toFixed(2)}</span>
+        <Row label="Overtime multiplier">
+          <span className="t-number">{settings.overtimeMultiplier.toFixed(2)}×</span>
         </Row>
         <Row label="Minimum rest" hint="between two shifts">
-          <span className="num">{settings.minRestHours}h</span>
+          <span className="t-number">{settings.minRestHours}h</span>
         </Row>
+        <Row label="Role match">Required · blocks conflicting assignments</Row>
+        <p className="text-ink-muted border-line border-t px-6 py-4 text-[12px] leading-[18px]">
+          These are planning rules for this workspace, not a legal or payroll compliance check. Requirements vary by contract and region.
+        </p>
       </Panel>
-
-      <Panel title="PayPal">
-        <Row label="Environment">
-          <span className="num text-info">Sandbox</span>
-        </Row>
-        <Row label="API host">
-          <span className="num text-[13px]">api-m.sandbox.paypal.com</span>
-        </Row>
-        <Row label="Payout approval">Operator confirms every batch</Row>
-      </Panel>
-    </div>
+    </>
   );
 }
 
-function Panel({ title, children }: { title: string; children: ReactNode }) {
+async function PaypalPanel() {
+  const configured = await paypalCredentialsConfigured();
   return (
-    <Card>
-      <h2 className="border-line text-heading border-b px-5 py-4">{title}</h2>
-      <dl className="divide-line divide-y">{children}</dl>
+    <Panel id="paypal" title="PayPal" subtitle="Payouts go through the PayPal Sandbox only." aside={configured ? <Pill severity="success">Sandbox credentials set</Pill> : <Pill severity="error">Credentials missing</Pill>}>
+      <Row label="Environment">
+        <Pill severity="neutral">Sandbox</Pill>
+      </Row>
+      <Row label="API host">
+        <span className="t-number">api-m.sandbox.paypal.com</span>
+      </Row>
+      <Row label="Payout approval">Operator confirms every batch</Row>
+      <p className="text-ink-muted border-line border-t px-6 py-4 text-[12px] leading-[18px]">
+        Sandbox uses simulated transactions. No real money moves. Credentials stay on the server and are never sent to the browser.
+      </p>
+    </Panel>
+  );
+}
+
+function Panel({ id, title, subtitle, aside, children }: { id: string; title: string; subtitle: string; aside?: ReactNode; children: ReactNode }) {
+  return (
+    <Card id={id} className="scroll-mt-6">
+      <CardHeader title={title} subtitle={subtitle} aside={aside} />
+      <dl>{children}</dl>
     </Card>
   );
 }
 
-function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+function Row({ label, hint, children }: { label: ReactNode; hint?: string; children: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-6 px-5 py-3.5">
-      <dt className="text-text-2 text-[14px]">
+    <div className="border-line flex min-h-[58px] items-center justify-between gap-6 border-b px-6 py-3 last:border-b-0">
+      <dt className="text-ink-secondary text-[14px] font-semibold">
         {label}
-        {hint && <span className="text-text-3 ml-2 text-[13px]">{hint}</span>}
+        {hint && <span className="text-ink-muted ml-2 text-[12px] font-medium">{hint}</span>}
       </dt>
       <dd className="text-right text-[14px]">{children}</dd>
     </div>
+  );
+}
+
+function PanelSkeleton({ rows }: { rows: number }) {
+  return (
+    <Card aria-busy="true">
+      <div className="border-line space-y-2 border-b px-6 py-[18px]">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-3 w-64" />
+      </div>
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="border-line flex h-[58px] items-center justify-between border-b px-6 last:border-b-0">
+          <Skeleton className="h-3.5 w-28" />
+          <Skeleton className="h-3.5 w-40" />
+        </div>
+      ))}
+    </Card>
   );
 }

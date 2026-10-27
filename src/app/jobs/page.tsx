@@ -1,101 +1,77 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { Card, EmptyState, JobStatusPill, PageHeader, Table, TableSkeleton } from "@/components/ui";
-import { formatDateRange, formatEUR } from "@/lib/format";
+import { EmptyState, MetricStrip, MetricStripSkeleton, PageHeader, TableSkeleton } from "@/components/ui";
+import { formatDateRange, formatEUR, jobRef } from "@/lib/format";
 import { getJobs } from "@/lib/queries";
+import { JobsTable, type JobRow } from "./jobs-table";
 
 export const metadata: Metadata = { title: "Jobs" };
 
 export default function JobsPage() {
   return (
     <>
-      <PageHeader title="Jobs" />
-      <Suspense fallback={<TableSkeleton rows={4} cols={6} />}>
-        <JobsList />
+      <PageHeader eyebrow="Operations / Overview" title="Jobs" subtitle="Plan the work. Keep the crew moving." />
+      <Suspense
+        fallback={
+          <>
+            <MetricStripSkeleton count={4} />
+            <div className="mb-5 h-[42px]" />
+            <TableSkeleton rows={5} rowHeight={76} columns={["26%", "11%", "15%", "6%", "11%", "17%"]} />
+          </>
+        }
+      >
+        <JobsOverview />
       </Suspense>
     </>
   );
 }
 
-type Job = Awaited<ReturnType<typeof getJobs>>[number];
-
-async function JobsList() {
+async function JobsOverview() {
   const jobs = await getJobs();
 
   if (jobs.length === 0) {
-    return (
-      <EmptyState
-        title="No jobs yet"
-        icon={
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-            <rect x="3.5" y="5" width="17" height="15" rx="2.5" />
-            <path d="M3.5 10h17M8 3v4M16 3v4M9 15h6" />
-          </svg>
-        }
-      >
-        A job starts from a plain-language brief. The agent turns it into shifts, picks a crew and pays everyone once the hours are signed off.
-      </EmptyState>
-    );
+    return <EmptyState title="Your first job starts here">Describe the work and Shiftly will propose a crew plan.</EmptyState>;
   }
 
-  const active = jobs.filter((j) => j.status !== "PAID");
-  const closed = jobs.filter((j) => j.status === "PAID");
+  const toPay = jobs.filter((j) => j.status === "DONE").length;
+  const withDeclines = jobs.filter((j) => j.declined > 0 && j.status === "PLANNING").length;
+  const attention = toPay + withDeclines;
+  const assignments = jobs.reduce((n, j) => n + j.assigned, 0);
+  const staffed = jobs.filter((j) => j.assigned > 0).length;
+  const readyToPayCents = jobs.filter((j) => j.status === "DONE").reduce((n, j) => n + j.forecastCents, 0);
+
+  const rows: JobRow[] = jobs.map((j) => ({
+    id: j.id,
+    ref: jobRef(j.id),
+    title: j.title,
+    client: j.client,
+    site: j.site,
+    dates: formatDateRange(j.startsAt, j.endsAt),
+    startsAt: j.startsAt.getTime(),
+    status: j.status,
+    confirmed: j.confirmed,
+    needed: j.needed,
+    budget: formatEUR(j.budgetCents),
+    forecast: formatEUR(j.forecastCents),
+    forecastRatio: j.budgetCents > 0 ? j.forecastCents / j.budgetCents : 0,
+    forecastLabel: j.status === "PAID" ? "final" : "planned",
+  }));
 
   return (
-    <div className="space-y-10">
-      <JobGroup label="Active" jobs={active} empty="Nothing on the board. Every job is closed and paid." />
-      <JobGroup label="Closed" jobs={closed} empty="No closed jobs yet." />
-    </div>
-  );
-}
-
-function JobGroup({ label, jobs, empty }: { label: string; jobs: Job[]; empty: string }) {
-  return (
-    <section>
-      <h2 className="label mb-3">
-        {label} <span className="text-text-2">· {jobs.length}</span>
-      </h2>
-      <Card>
-        {jobs.length === 0 ? (
-          <p className="text-text-2 px-5 py-6 text-[14px]">{empty}</p>
-        ) : (
-          <Table
-            head={[{ label: "Job" }, { label: "Site" }, { label: "Dates" }, { label: "Crew", align: "right" }, { label: "Budget", align: "right" }, { label: "Status" }]}
-          >
-            {jobs.map((job) => (
-              <JobRow key={job.id} job={job} />
-            ))}
-          </Table>
-        )}
-      </Card>
-    </section>
-  );
-}
-
-function JobRow({ job }: { job: Job }) {
-  const needed = job.shifts.reduce((n, s) => n + s.headcount, 0);
-  const confirmed = job.shifts.reduce((n, s) => n + s.assignments.filter((a) => a.status === "CONFIRMED").length, 0);
-  return (
-    <tr>
-      <td>
-        <p className="font-semibold">{job.title}</p>
-        <p className="text-text-3 text-[13px]">{job.client}</p>
-      </td>
-      <td className="text-text-2 max-w-[260px]">{job.site}</td>
-      <td className="whitespace-nowrap">
-        <p className="num text-[13px]">{formatDateRange(job.startsAt, job.endsAt)}</p>
-        <p className="text-text-3 text-[13px]">
-          {job.shifts.length} {job.shifts.length === 1 ? "shift" : "shifts"}
-        </p>
-      </td>
-      <td className="num text-right whitespace-nowrap">
-        {confirmed}
-        <span className="text-text-3">/{needed}</span>
-      </td>
-      <td className="num text-right whitespace-nowrap">{formatEUR(job.budgetCents)}</td>
-      <td>
-        <JobStatusPill status={job.status} />
-      </td>
-    </tr>
+    <>
+      <MetricStrip
+        metrics={[
+          { label: "Active & recent jobs", value: String(jobs.length).padStart(2, "0"), caption: "Across your workspace" },
+          {
+            label: "Need your attention",
+            value: String(attention).padStart(2, "0"),
+            caption: attention === 0 ? "Nothing waiting on you" : [toPay && `${toPay} to pay`, withDeclines && `${withDeclines} with declines`].filter(Boolean).join(" · "),
+          },
+          { label: "Crew assignments", value: String(assignments).padStart(2, "0"), caption: `Booked across ${staffed} ${staffed === 1 ? "job" : "jobs"}` },
+          { label: "Ready to pay", value: formatEUR(readyToPayCents), money: true, caption: toPay === 0 ? "No jobs waiting for payout" : `Planned cost of ${toPay} ${toPay === 1 ? "job" : "jobs"}` },
+        ]}
+      />
+      <JobsTable rows={rows} />
+    </>
   );
 }

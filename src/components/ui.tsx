@@ -1,166 +1,277 @@
 import type { ReactNode } from "react";
 import type { JobStatus, Role } from "@/generated/prisma/enums";
+import { Mark } from "@/components/brand";
+import { initials } from "@/lib/format";
+import { roleLabel, roleTokens } from "@/lib/roles";
 
-// --- pills: docs/design-system.md §3 -----------------------------------------
+// --- pills: design-system.md §05 "Status pills (single semantic ladder)" ----------
 
-export type Tone = "neutral" | "info" | "accent" | "warn" | "ok" | "err";
+export type Severity = "neutral" | "info" | "warning" | "error" | "success";
 
-const toneClass: Record<Tone, string> = {
-  neutral: "text-text-2 border-line",
-  info: "text-info border-info/30",
-  accent: "text-accent border-accent/30",
-  warn: "text-warn border-warn/30",
-  ok: "text-ok border-ok/30",
-  err: "text-err border-err/30",
+const severityClass: Record<Severity, string> = {
+  neutral: "bg-neutral-bg text-neutral-fg",
+  info: "bg-info-bg text-info-fg",
+  warning: "bg-warning-bg text-warning-fg",
+  error: "bg-error-bg text-error-fg",
+  success: "bg-success-bg text-success-fg",
 };
 
-export function Pill({ tone, children }: { tone: Tone; children: ReactNode }) {
+export function Pill({ severity, children, title }: { severity: Severity; children: ReactNode; title?: string }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] font-semibold whitespace-nowrap ${toneClass[tone]}`}>
-      <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
+    <span
+      title={title}
+      className={`inline-flex h-[26px] items-center gap-1.5 rounded-full px-[9px] text-[11px] leading-none font-extrabold whitespace-nowrap ${severityClass[severity]}`}
+    >
+      <span className="size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true" />
       {children}
     </span>
   );
 }
 
-const jobStatus: Record<JobStatus, { tone: Tone; label: string }> = {
-  PLANNING: { tone: "neutral", label: "Planning" },
-  CREW_CONFIRMED: { tone: "info", label: "Crew confirmed" },
-  IN_PROGRESS: { tone: "accent", label: "In progress" },
-  DONE: { tone: "warn", label: "Done · to pay" },
-  PAID: { tone: "ok", label: "Paid" },
-};
-
-export function JobStatusPill({ status }: { status: JobStatus }) {
-  const s = jobStatus[status];
-  return <Pill tone={s.tone}>{s.label}</Pill>;
-}
-
-/** PayPal batch_status / transaction_status, plus our own DRAFT. */
-export function payoutTone(status: string): { tone: Tone; label: string } {
-  switch (status) {
-    case "SUCCESS":
-      return { tone: "ok", label: "Paid" };
-    case "UNCLAIMED":
-      return { tone: "neutral", label: "Unclaimed" };
-    case "DRAFT":
-      return { tone: "neutral", label: "Draft" };
-    case "PENDING":
-    case "PROCESSING":
-    case "NEW":
-    case "ONHOLD":
-      return { tone: "neutral", label: "Pending" };
-    default:
-      return { tone: "err", label: status.charAt(0) + status.slice(1).toLowerCase() };
-  }
-}
-
-export function PayoutPill({ status }: { status: string }) {
-  const s = payoutTone(status);
-  return <Pill tone={s.tone}>{s.label}</Pill>;
-}
-
-/** Seeded history that never went through PayPal. */
+/** Data origin tag: neutral, no dot. */
 export function DemoTag() {
   return (
     <span
-      title="Seeded history: these IDs were never sent to PayPal"
-      className="border-line text-text-3 inline-flex rounded-[5px] border border-dashed px-1.5 py-px font-mono text-[10px] font-medium tracking-[0.08em] whitespace-nowrap uppercase"
+      title="Seeded history: these records were never sent to PayPal"
+      className="border-line text-neutral-fg inline-flex h-[26px] items-center rounded-full border bg-[var(--surface-alt)] px-[9px] text-[11px] leading-none font-extrabold whitespace-nowrap"
     >
       Demo data
     </span>
   );
 }
 
-// --- roles ---------------------------------------------------------------------
-
-export const roleColor: Record<Role, string> = {
-  MONTATORE: "var(--role-montatore)",
-  ELETTRICISTA: "var(--role-elettricista)",
-  RIGGER: "var(--role-rigger)",
-  AUTISTA: "var(--role-autista)",
+const jobStatus: Record<JobStatus, { severity: Severity; label: string }> = {
+  PLANNING: { severity: "neutral", label: "Planning" },
+  CREW_CONFIRMED: { severity: "info", label: "Crew confirmed" },
+  IN_PROGRESS: { severity: "warning", label: "In progress" },
+  DONE: { severity: "warning", label: "Done · to pay" },
+  PAID: { severity: "success", label: "Paid" },
 };
+
+export function JobStatusPill({ status }: { status: JobStatus }) {
+  const s = jobStatus[status];
+  return <Pill severity={s.severity}>{s.label}</Pill>;
+}
+
+/** PayPal transaction_status → UI label. Raw status stays available in the tooltip. */
+export function payoutItemState(status: string): { severity: Severity; label: string } {
+  switch (status) {
+    case "SUCCESS":
+      return { severity: "success", label: "Paid" };
+    case "DRAFT":
+      return { severity: "neutral", label: "Not sent" };
+    case "NEW":
+    case "PENDING":
+    case "PROCESSING":
+      return { severity: "info", label: "Pending" };
+    case "UNCLAIMED":
+      return { severity: "warning", label: "Unclaimed" };
+    case "ONHOLD":
+      return { severity: "warning", label: "On hold" };
+    case "FAILED":
+      return { severity: "error", label: "Failed" };
+    case "RETURNED":
+      return { severity: "error", label: "Returned" };
+    case "REFUNDED":
+      return { severity: "error", label: "Refunded" };
+    case "BLOCKED":
+      return { severity: "error", label: "Blocked" };
+    default:
+      return { severity: "error", label: status.charAt(0) + status.slice(1).toLowerCase() };
+  }
+}
+
+export function PayoutItemPill({ status }: { status: string }) {
+  const s = payoutItemState(status);
+  return (
+    <Pill severity={s.severity} title={`PayPal status: ${status}`}>
+      {s.label}
+    </Pill>
+  );
+}
+
+/** Batch state is computed from its items, never from batch_status alone. */
+export function payoutBatchState(itemStatuses: string[]): { severity: Severity; label: string } {
+  const paid = itemStatuses.filter((s) => s === "SUCCESS").length;
+  if (itemStatuses.length > 0 && paid === itemStatuses.length) return { severity: "success", label: "Completed" };
+  if (itemStatuses.every((s) => s === "DRAFT")) return { severity: "neutral", label: "Not sent" };
+  const unresolved = itemStatuses.some((s) => payoutItemState(s).severity === "info");
+  if (paid > 0) return { severity: "warning", label: "Partially paid" };
+  if (unresolved) return { severity: "info", label: "Processing" };
+  return { severity: "error", label: "Needs attention" };
+}
+
+// --- roles & people -------------------------------------------------------------
 
 export function RoleTag({ role }: { role: Role }) {
   return (
-    <span className="text-text-2 inline-flex items-center gap-2 text-[13px]">
-      <span className="size-2 rounded-[3px]" style={{ background: roleColor[role] }} aria-hidden="true" />
-      {role.charAt(0) + role.slice(1).toLowerCase()}
+    <span className="text-ink-secondary inline-flex items-center gap-2 text-[13px] font-semibold whitespace-nowrap">
+      <span className="size-2 shrink-0 rounded-full" style={{ background: roleTokens[role].fg }} aria-hidden="true" />
+      {roleLabel[role]}
     </span>
   );
 }
 
-// --- layout pieces -------------------------------------------------------------------
-
-export function PageHeader({ title, children }: { title: string; children?: ReactNode }) {
+export function Avatar({ name, role }: { name: string; role?: Role }) {
+  const tone = role ? roleTokens[role] : { fg: "var(--neutral-fg)", bg: "var(--neutral-bg)" };
   return (
-    <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
-      <h1 className="text-title">{title}</h1>
-      {children}
+    <span
+      aria-hidden="true"
+      className="grid size-[30px] shrink-0 place-items-center rounded-full text-[10px] font-extrabold"
+      style={{ background: tone.bg, color: `color-mix(in srgb, ${tone.fg} 85%, var(--ink))` }}
+    >
+      {initials(name)}
+    </span>
+  );
+}
+
+// --- page structure -------------------------------------------------------------
+
+export function PageHeader({ eyebrow, title, subtitle, actions }: { eyebrow: string; title: string; subtitle: string; actions?: ReactNode }) {
+  return (
+    <header className="mt-5 mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <p className="t-eyebrow text-accent mb-2 text-[10px] tracking-[1.7px]">{eyebrow}</p>
+        <h1 className="t-h1">{title}</h1>
+        <p className="text-ink-muted mt-1.5 text-[14px]">{subtitle}</p>
+      </div>
+      {actions && <div className="flex items-center gap-2.5">{actions}</div>}
     </header>
   );
 }
 
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`border-line bg-bg-1 rounded-card border ${className}`}>{children}</section>;
-}
-
-export function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }) {
+export function Card({ children, className = "", ...rest }: { children: ReactNode; className?: string } & React.HTMLAttributes<HTMLElement>) {
   return (
-    <Card className="px-5 py-4">
-      <p className="label">{label}</p>
-      <p className="num mt-2 text-[22px]">{value}</p>
-      {hint && <p className="text-text-3 mt-1 text-[13px]">{hint}</p>}
-    </Card>
+    <section className={`border-line bg-surface overflow-hidden rounded-[var(--radius-lg)] border ${className}`} {...rest}>
+      {children}
+    </section>
   );
 }
 
-export function EmptyState({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
+export function CardHeader({ title, subtitle, aside }: { title: string; subtitle?: string; aside?: ReactNode }) {
   return (
-    <Card className="flex flex-col items-center px-6 py-16 text-center">
-      <div className="border-line bg-bg-2 text-text-2 mb-5 grid size-12 place-items-center rounded-full border [&>svg]:size-6">{icon}</div>
-      <h2 className="text-heading">{title}</h2>
-      <p className="text-text-2 mt-2 max-w-md text-[14px] leading-relaxed">{children}</p>
-    </Card>
+    <div className="border-line flex items-center justify-between gap-4 border-b px-6 py-[18px]">
+      <div>
+        <h2 className="t-h3">{title}</h2>
+        {subtitle && <p className="text-ink-muted t-small mt-0.5 font-medium">{subtitle}</p>}
+      </div>
+      {aside && <div className="text-ink-muted t-small font-medium">{aside}</div>}
+    </div>
   );
 }
 
-/** Table shell: horizontal scroll on narrow screens, hairline rows, hover row. */
-export function Table({ head, children }: { head: { label: string; align?: "right" }[]; children: ReactNode }) {
+/** Understated metric row: hairline-separated, no heavy boxes. */
+export function MetricStrip({ metrics }: { metrics: { label: string; value: ReactNode; caption: ReactNode; money?: boolean; tone?: "error" }[] }) {
+  return (
+    <div
+      className="border-line bg-surface mb-6 grid grid-cols-2 overflow-hidden rounded-[var(--radius-lg)] border wide:grid-cols-[repeat(var(--cols),minmax(0,1fr))]"
+      style={{ "--cols": metrics.length } as React.CSSProperties}
+    >
+      {metrics.map((m) => (
+        <div key={m.label} className="border-line min-w-0 border-r border-b px-6 py-5 last:border-r-0 wide:border-b-0 [&:nth-child(2n)]:border-r-0 wide:[&:nth-child(2n)]:border-r wide:last:border-r-0">
+          <p className="text-ink-muted t-small font-bold">{m.label}</p>
+          <p className={`mt-2 ${m.money ? "t-number-lg text-[24px]" : "text-[26px] leading-[34px] font-extrabold tracking-[-0.7px] tabular-nums"} ${m.tone === "error" ? "text-error-fg" : ""}`}>
+            {m.value}
+          </p>
+          <p className="text-ink-muted mt-1 text-[12px] leading-[18px]">{m.caption}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Table shell: surface-alt header, 11px uppercase labels, hairline rows; scrolls instead of squeezing. */
+export function Table({ head, minWidth, label, children }: { head: { label: string; align?: "right"; className?: string }[]; minWidth?: number; label: string; children: ReactNode }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-left text-[14px]">
+      <table aria-label={label} className="w-full border-collapse text-left" style={{ minWidth }}>
         <thead>
-          <tr className="border-line border-b">
+          <tr className="border-line bg-surface-alt border-b">
             {head.map((h) => (
-              <th key={h.label} scope="col" className={`label px-5 py-3 font-medium whitespace-nowrap ${h.align === "right" ? "text-right" : ""}`}>
+              <th
+                key={h.label}
+                scope="col"
+                className={`text-ink-secondary h-11 px-5 text-[11px] font-extrabold tracking-[0.65px] whitespace-nowrap uppercase ${h.align === "right" ? "text-right" : ""} ${h.className ?? ""}`}
+              >
                 {h.label}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="[&>tr]:border-line [&>tr:hover]:bg-bg-2/60 [&>tr]:border-b [&>tr:last-child]:border-b-0 [&_td]:px-5 [&_td]:py-3.5">
-          {children}
-        </tbody>
+        <tbody className="[&>tr]:border-line [&>tr]:border-b [&>tr:last-child]:border-b-0 [&>tr:hover]:bg-surface-hover/60 [&_td]:px-5">{children}</tbody>
       </table>
     </div>
   );
 }
 
-export function TableSkeleton({ rows = 5, cols = 5 }: { rows?: number; cols?: number }) {
+export function TableFootnote({ left, right }: { left: ReactNode; right?: ReactNode }) {
   return (
-    <div aria-busy="true" className="border-line bg-bg-1 rounded-card border">
-      <div className="border-line border-b px-5 py-3.5">
-        <div className="skeleton h-3 w-40" />
+    <div className="text-ink-muted flex flex-wrap justify-between gap-2 px-1 pt-4 text-[12px]">
+      <span>{left}</span>
+      {right && <span>{right}</span>}
+    </div>
+  );
+}
+
+export function EmptyState({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
+  return (
+    <Card className="flex flex-col items-center px-6 py-16 text-center">
+      <div className="border-line bg-surface mb-5 grid size-14 place-items-center rounded-[var(--radius-md)] border">
+        <Mark size={30} />
+      </div>
+      <h2 className="t-h2">{title}</h2>
+      <p className="text-ink-muted mt-2 max-w-md text-[14px]">{children}</p>
+      {action && <div className="mt-6">{action}</div>}
+    </Card>
+  );
+}
+
+export const buttonClass = {
+  primary:
+    "inline-flex h-11 items-center justify-center gap-2 rounded-[10px] bg-accent px-[18px] text-[13px] font-bold text-ink-inverse transition-colors duration-[var(--duration-fast)] hover:bg-accent-hover active:bg-accent-pressed",
+  secondary:
+    "inline-flex h-11 items-center justify-center gap-2 rounded-[10px] border border-line-strong bg-surface px-[18px] text-[13px] font-bold text-ink transition-colors duration-[var(--duration-fast)] hover:bg-surface-hover active:bg-surface-pressed",
+  quiet:
+    "inline-flex h-11 items-center justify-center gap-2 rounded-[10px] px-[18px] text-[13px] font-bold text-ink-secondary transition-colors duration-[var(--duration-fast)] hover:bg-surface-hover",
+};
+
+// --- loading ------------------------------------------------------------------------
+
+export function Skeleton({ className = "" }: { className?: string }) {
+  return <div className={`skeleton ${className}`} />;
+}
+
+/** Skeleton rows that keep the finished table's geometry. */
+export function TableSkeleton({ rows = 5, rowHeight = 76, columns }: { rows?: number; rowHeight?: number; columns: string[] }) {
+  return (
+    <Card aria-busy="true">
+      <div className="bg-surface-alt border-line flex h-11 items-center gap-6 border-b px-5">
+        {columns.map((w, i) => (
+          <div key={i} className="skeleton h-2.5" style={{ width: `calc(${w} * 0.6)` }} />
+        ))}
       </div>
       {Array.from({ length: rows }, (_, r) => (
-        <div key={r} className="border-line flex gap-6 border-b px-5 py-4 last:border-b-0">
-          {Array.from({ length: cols }, (_, c) => (
-            <div key={c} className="skeleton h-4 flex-1" style={{ maxWidth: c === 0 ? 220 : 120 }} />
+        <div key={r} className="border-line flex items-center gap-6 border-b px-5 last:border-b-0" style={{ height: rowHeight }}>
+          {columns.map((w, c) => (
+            <div key={c} className="skeleton h-3.5" style={{ width: w }} />
           ))}
         </div>
       ))}
       <span className="sr-only">Loading…</span>
+    </Card>
+  );
+}
+
+export function MetricStripSkeleton({ count }: { count: number }) {
+  return (
+    <div className="border-line bg-surface mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-[var(--radius-lg)] border wide:grid-cols-[repeat(var(--cols),minmax(0,1fr))]" style={{ "--cols": count } as React.CSSProperties} aria-hidden="true">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="space-y-3 px-6 py-5">
+          <Skeleton className="h-3 w-28" />
+          <Skeleton className="h-7 w-24" />
+          <Skeleton className="h-3 w-36" />
+        </div>
+      ))}
     </div>
   );
 }
