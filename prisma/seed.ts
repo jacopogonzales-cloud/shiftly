@@ -3,7 +3,7 @@
 import { randomBytes } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, type Role, type Worker } from "../src/generated/prisma/client";
-import { shiftPayCents } from "../src/lib/pay";
+import { personPayCents } from "../src/lib/pay";
 import { pgConfig } from "../src/lib/pg-config";
 
 const prisma = new PrismaClient({ adapter: new PrismaPg(pgConfig(process.env.DATABASE_URL)) });
@@ -59,8 +59,7 @@ function romeWeekday(): number {
 const token = () => randomBytes(16).toString("base64url");
 const minutesBetween = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / 60_000);
 
-const payCents = (minutes: number, hourlyRateCents: number) =>
-  shiftPayCents(minutes, hourlyRateCents, { overtimeAfterMinutes: OVERTIME_AFTER, overtimeMultiplier: OVERTIME_MULTIPLIER });
+const PAY_RULES = { overtimeAfterMinutes: OVERTIME_AFTER, overtimeMultiplier: OVERTIME_MULTIPLIER };
 
 // --- data ------------------------------------------------------------------
 
@@ -75,6 +74,10 @@ const workers: { name: string; role: Role; rate: number; reliability: number; ph
   { name: "Chiara Greco", role: "AUTISTA", rate: 1600, reliability: 95, phone: "+39 338 776 1204", notes: "C+E licence, own tail-lift." },
   { name: "Matteo Bruno", role: "AUTISTA", rate: 1550, reliability: 72, phone: "+39 351 248 6610" },
   { name: "Elena Gallo", role: "MONTATORE", rate: 1750, reliability: 87, phone: "+39 342 309 5581" },
+  { name: "Paolo Ferrari", role: "MONTATORE", rate: 1700, reliability: 83, phone: "+39 347 880 2214", notes: "Forklift licence." },
+  { name: "Simone Conti", role: "MONTATORE", rate: 1650, reliability: 76, phone: "+39 329 145 7702" },
+  { name: "Valentina Moretti", role: "MONTATORE", rate: 1800, reliability: 91, phone: "+39 340 662 0938", notes: "Carpentry and graphics install." },
+  { name: "Andrea Lombardi", role: "ELETTRICISTA", rate: 2350, reliability: 86, phone: "+39 335 701 4419", notes: "PES/PAV certified." },
 ];
 
 function emailFor(index: number, name: string): string {
@@ -101,35 +104,41 @@ async function main() {
   }
   const byName = (first: string) => crew.find((w) => w.name.startsWith(first))!;
 
-  // Availability for the next 21 days, with a deterministic sprinkle of days off.
+  const busy = new Set<string>(); // "workerId:day" for every seeded booking
+  await seedPaidJob(byName, busy);
+  await seedInProgressJob(byName, busy);
+
+  // Availability from 10 days ago to 30 days ahead. Exactly one person is off each day (3 is coprime with
+  // the crew size, so the day-off rotates through everyone), and never on a day they are already booked.
   await prisma.availability.createMany({
     data: crew.flatMap((w, wi) =>
-      Array.from({ length: 21 }, (_, day) => ({ workerId: w.id, date: dateOnly(day), available: (wi * 7 + day * 3) % 11 !== 0 })),
+      Array.from({ length: 41 }, (_, i) => {
+        const day = i - 10;
+        const off = (((day + wi * 3) % crew.length) + crew.length) % crew.length === 0;
+        return { workerId: w.id, date: dateOnly(day), available: !off || busy.has(`${w.id}:${day}`) };
+      }),
     ),
   });
-
-  await seedPaidJob(byName);
-  await seedInProgressJob(byName);
 
   console.log(`Seeded: 1 company, ${crew.length} workers, 2 jobs.`);
 }
 
 type ByName = (first: string) => { id: number; name: string; hourlyRateCents: number };
 
-async function seedPaidJob(byName: ByName) {
+async function seedPaidJob(byName: ByName, busy: Set<string>) {
   // Two days, five weeks ago, Tue/Wed.
   const base = -35 - romeWeekday() + 1;
   const job = await prisma.job.create({
     data: {
-      title: "Allestimento convention autunnale",
-      client: "Studio Vela Eventi",
+      title: "Autumn convention build",
+      client: "Vela Events Studio",
       site: "Via Tortona 27, Milano",
       startsAt: at(base, "07:30"),
       endsAt: at(base + 1, "14:00"),
       status: "PAID",
       budgetCents: 140_000,
       requirementsText:
-        "Convention for 400 people at Via Tortona. Day 1 build: 3 montatori and 1 elettricista from 07:30 to 17:30. Day 2 rigging and finishing: 1 rigger and 2 montatori 08:00–14:00.",
+        "Convention for 400 people at Via Tortona. Day 1 build: 3 installers and 1 electrician from 07:30 to 17:30. Day 2 rigging and finishing: 1 rigger and 2 installers 08:00–14:00.",
       requirements: {
         shifts: [
           { day: 1, start: "07:30", end: "17:30", role: "MONTATORE", headcount: 3 },
@@ -143,7 +152,7 @@ async function seedPaidJob(byName: ByName) {
 
   const plan: { day: number; start: string; end: string; role: Role; crew: { name: string; actual?: number; reason: string }[] }[] = [
     { day: 0, start: "07:30", end: "17:30", role: "MONTATORE", crew: [
-      { name: "Luca", reason: "Most reliable montatore available, leads the build." },
+      { name: "Luca", reason: "Most reliable installer available; leads the build." },
       { name: "Francesca", actual: 630, reason: "Available both days, rate within budget." },
       { name: "Elena", reason: "High reliability, free on day 1." },
     ] },
@@ -155,11 +164,11 @@ async function seedPaidJob(byName: ByName) {
     ] },
     { day: 1, start: "08:00", end: "14:00", role: "MONTATORE", crew: [
       { name: "Luca", reason: "Continuity with day-1 build, 14h rest respected." },
-      { name: "Alessandro", actual: 330, reason: "Lowest rate among free montatori." },
+      { name: "Alessandro", actual: 330, reason: "Lowest rate among free installers." },
     ] },
   ];
 
-  const totals = new Map<number, number>();
+  const worked = new Map<number, { rate: number; days: { day: string; minutes: number }[] }>();
   for (const s of plan) {
     const startsAt = at(base + s.day, s.start);
     const endsAt = at(base + s.day, s.end);
@@ -171,7 +180,10 @@ async function seedPaidJob(byName: ByName) {
           create: s.crew.map((c) => {
             const w = byName(c.name);
             const actual = c.actual ?? planned;
-            totals.set(w.id, (totals.get(w.id) ?? 0) + payCents(actual, w.hourlyRateCents));
+            const entry = worked.get(w.id) ?? { rate: w.hourlyRateCents, days: [] };
+            entry.days.push({ day: String(base + s.day), minutes: actual });
+            worked.set(w.id, entry);
+            busy.add(`${w.id}:${base + s.day}`);
             return { workerId: w.id, status: "CONFIRMED" as const, plannedMinutes: planned, actualMinutes: actual, reason: c.reason, token: token() };
           }),
         },
@@ -179,6 +191,7 @@ async function seedPaidJob(byName: ByName) {
     });
   }
 
+  const totals = new Map([...worked.entries()].map(([id, w]) => [id, personPayCents(w.days, w.rate, PAY_RULES)]));
   const totalCents = [...totals.values()].reduce((a, b) => a + b, 0);
   const paidAt = at(base + 1, "18:40");
   const senderBatchId = `job-${job.id}-1`;
@@ -222,11 +235,11 @@ async function seedPaidJob(byName: ByName) {
   });
 }
 
-async function seedInProgressJob(byName: ByName) {
+async function seedInProgressJob(byName: ByName, busy: Set<string>) {
   // Four days starting yesterday: rigging, build, power, load-out.
   const job = await prisma.job.create({
     data: {
-      title: "Montaggio palco concerto",
+      title: "Concert stage build",
       client: "Arcadia Live",
       site: "Arena Civica, Viale Byron 2, Milano",
       startsAt: at(-1, "07:00"),
@@ -234,7 +247,7 @@ async function seedInProgressJob(byName: ByName) {
       status: "IN_PROGRESS",
       budgetCents: 380_000,
       requirementsText:
-        "Outdoor stage for an evening concert. Day 1 rigging 07:00–15:00 (2 riggers, 2 montatori). Day 2 build and power 08:00–18:00 (2 elettricisti, 2 montatori). Day 3 transport 09:00–17:00 (2 autisti). Day 4 load-out 14:00–22:00 (3 montatori, 1 autista).",
+        "Outdoor stage for an evening concert. Day 1 rigging 07:00–15:00 (2 riggers, 2 installers). Day 2 build and power 08:00–18:00 (2 electricians, 2 installers). Day 3 transport 09:00–17:00 (2 drivers). Day 4 load-out 14:00–22:00 (3 installers, 1 driver).",
     },
   });
 
@@ -258,7 +271,7 @@ async function seedInProgressJob(byName: ByName) {
       data: {
         jobId: job.id, startsAt, endsAt, role: s.role, headcount: s.crew.length,
         assignments: {
-          create: s.crew.map((name) => ({
+          create: s.crew.map((name) => (busy.add(`${byName(name).id}:${s.day}`), {
             workerId: byName(name).id, status: "CONFIRMED" as const, plannedMinutes: planned, reason: "Matches role, available, rest window respected.", token: token(),
           })),
         },
@@ -273,7 +286,7 @@ async function seedInProgressJob(byName: ByName) {
       log("operator", "job.created", "Job created from client brief.", at(-8, "09:40")),
       log("agent", "plan.proposed", `Proposed ${count} assignments for 9 people; all hard constraints met.`, at(-8, "09:43")),
       log("operator", "requests.sent", `Sent ${count} availability requests.`, at(-8, "09:50")),
-      log("agent", "plan.rebalanced", "Alessandro declined day 1. Elena takes the montatore slot: free, reliability 87.", at(-7, "11:05")),
+      log("agent", "plan.rebalanced", "Alessandro declined day 1. Elena takes the installer slot: free, reliability 87.", at(-7, "11:05")),
       log("operator", "crew.confirmed", `All ${count} assignments confirmed. Crew locked.`, at(-6, "18:20")),
       log("operator", "job.started", "Job started.", at(-1, "06:55")),
     ],
