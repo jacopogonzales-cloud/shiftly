@@ -126,6 +126,7 @@ model PayoutBatch {
   totalCents    Int
   createdBy     Actor
   approvedAt    DateTime?
+  demo          Boolean      @default(false) // seeded history, never sent to PayPal
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
   items         PayoutItem[]

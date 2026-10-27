@@ -194,6 +194,7 @@ async function seedPaidJob(byName: ByName) {
       status: "SUCCESS",
       totalCents,
       createdBy: "operator",
+      demo: true,
       approvedAt: paidAt,
       createdAt: paidAt,
       items: {

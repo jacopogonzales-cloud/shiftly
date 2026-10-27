@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { Card, EmptyState, PageHeader, PayoutPill, RoleTag, Stat, Table, TableSkeleton } from "@/components/ui";
+import { Card, DemoTag, EmptyState, PageHeader, PayoutPill, RoleTag, Stat, Table, TableSkeleton } from "@/components/ui";
 import { formatDateTime, formatEUR } from "@/lib/format";
 import { getPayoutBatches } from "@/lib/queries";
 
@@ -53,12 +53,21 @@ async function Batches() {
   const paidCents = items.filter((i) => i.status === "SUCCESS").reduce((n, i) => n + i.amountCents, 0);
   const paidPeople = new Set(items.filter((i) => i.status === "SUCCESS").map((i) => i.workerId)).size;
   const open = batches.filter((b) => OPEN_STATES.has(b.status)).length;
+  const demoCents = batches.filter((b) => b.demo).flatMap((b) => b.items).filter((i) => i.status === "SUCCESS").reduce((n, i) => n + i.amountCents, 0);
   const failed = items.filter((i) => !["SUCCESS", "PENDING", "UNCLAIMED", "DRAFT"].includes(i.status)).length;
 
   return (
     <div className="space-y-8">
       <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Paid out" value={formatEUR(paidCents)} hint={`${paidPeople} ${paidPeople === 1 ? "person" : "people"} via PayPal`} />
+        <Stat
+          label="Paid out"
+          value={formatEUR(paidCents)}
+          hint={
+            demoCents > 0
+              ? `${paidPeople} ${paidPeople === 1 ? "person" : "people"} · ${formatEUR(demoCents)} is demo data`
+              : `${paidPeople} ${paidPeople === 1 ? "person" : "people"} via PayPal`
+          }
+        />
         <Stat label="Open batches" value={open} hint={open === 0 ? "Nothing in flight" : "Waiting on PayPal"} />
         <Stat label="Failed items" value={failed} hint={failed === 0 ? "All clear" : "Retry from the batch"} />
       </div>
@@ -83,7 +92,10 @@ async function Batches() {
               </dl>
             </div>
             <div className="flex flex-col items-end gap-2">
-              <PayoutPill status={batch.status} />
+              <div className="flex items-center gap-2">
+                {batch.demo && <DemoTag />}
+                <PayoutPill status={batch.status} />
+              </div>
               <p className="num text-[18px]">{formatEUR(batch.totalCents)}</p>
             </div>
           </header>
@@ -98,7 +110,10 @@ async function Batches() {
                 <td className="num text-info text-[13px]">{item.paypalItemId ?? "—"}</td>
                 <td className="num text-right whitespace-nowrap">{formatEUR(item.amountCents)}</td>
                 <td>
-                  <PayoutPill status={item.status} />
+                  <div className="flex items-center gap-2">
+                    <PayoutPill status={item.status} />
+                    {batch.demo && <DemoTag />}
+                  </div>
                   {item.errorMessage && <p className="text-err mt-1 text-[13px]">{item.errorMessage}</p>}
                 </td>
               </tr>

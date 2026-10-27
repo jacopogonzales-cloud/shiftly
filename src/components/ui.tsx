@@ -60,6 +60,18 @@ export function PayoutPill({ status }: { status: string }) {
   return <Pill tone={s.tone}>{s.label}</Pill>;
 }
 
+/** Seeded history that never went through PayPal. */
+export function DemoTag() {
+  return (
+    <span
+      title="Seeded history: these IDs were never sent to PayPal"
+      className="border-line text-text-3 inline-flex rounded-[5px] border border-dashed px-1.5 py-px font-mono text-[10px] font-medium tracking-[0.08em] whitespace-nowrap uppercase"
+    >
+      Demo data
+    </span>
+  );
+}
+
 // --- roles ---------------------------------------------------------------------
 
 export const roleColor: Record<Role, string> = {
