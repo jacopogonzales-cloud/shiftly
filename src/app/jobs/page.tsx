@@ -1,6 +1,8 @@
+import { Plus } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
-import { EmptyState, MetricStrip, MetricStripSkeleton, PageHeader, TableSkeleton } from "@/components/ui";
+import { buttonClass, EmptyState, MetricStrip, MetricStripSkeleton, PageHeader, TableSkeleton } from "@/components/ui";
 import { formatDateRange, formatEUR, jobRef } from "@/lib/format";
 import { getJobs } from "@/lib/queries";
 import { JobsTable, type JobRow } from "./jobs-table";
@@ -10,7 +12,16 @@ export const metadata: Metadata = { title: "Jobs" };
 export default function JobsPage() {
   return (
     <>
-      <PageHeader eyebrow="Operations / Overview" title="Jobs" subtitle="Plan the work. Keep the crew moving." />
+      <PageHeader
+        eyebrow="Operations / Overview"
+        title="Jobs"
+        subtitle="Plan the work. Keep the crew moving."
+        actions={
+          <Link href="/jobs/new" className={buttonClass.primary}>
+            <Plus size={18} aria-hidden="true" /> New job
+          </Link>
+        }
+      />
       <Suspense
         fallback={
           <>
@@ -30,7 +41,18 @@ async function JobsOverview() {
   const jobs = await getJobs();
 
   if (jobs.length === 0) {
-    return <EmptyState title="Your first job starts here">Describe the work and Shiftly will propose a crew plan.</EmptyState>;
+    return (
+      <EmptyState
+        title="Your first job starts here"
+        action={
+          <Link href="/jobs/new" className={buttonClass.primary}>
+            Create a job
+          </Link>
+        }
+      >
+        Describe the work and Shiftly will propose a crew plan.
+      </EmptyState>
+    );
   }
 
   const toPay = jobs.filter((j) => j.status === "DONE").length;

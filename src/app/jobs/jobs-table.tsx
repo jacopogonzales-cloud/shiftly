@@ -1,5 +1,7 @@
 "use client";
 
+import { ArrowUpRight } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { SearchInput, Segmented } from "@/components/filters";
 import { buttonClass, Card, CardHeader, JobStatusPill, Table, TableFootnote } from "@/components/ui";
@@ -74,12 +76,14 @@ export function JobsTable({ rows }: { rows: JobRow[] }) {
           <Table
             label="Jobs table"
             minWidth={980}
-            head={[{ label: "Job" }, { label: "Dates" }, { label: "Location" }, { label: "Crew" }, { label: "Status" }, { label: "Budget / forecast" }]}
+            head={[{ label: "Job" }, { label: "Dates" }, { label: "Location" }, { label: "Crew" }, { label: "Status" }, { label: "Budget / forecast" }, { label: "Open", className: "sr-only" }]}
           >
             {visible.map((r) => (
-              <tr key={r.id} className="h-[76px]">
+              <tr key={r.id} className="relative h-[76px] cursor-pointer">
                 <td>
-                  <p className="t-body-strong text-[13px] leading-5 whitespace-nowrap">{r.title}</p>
+                  <Link href={`/jobs/${r.id}`} className="t-body-strong text-[13px] leading-5 whitespace-nowrap after:absolute after:inset-0 after:content-['']">
+                    {r.title}
+                  </Link>
                   <p className="text-ink-muted mt-1 text-[11px] leading-4">
                     {r.ref} · {r.client}
                   </p>
@@ -103,6 +107,9 @@ export function JobsTable({ rows }: { rows: JobRow[] }) {
                     />
                   </div>
                   {r.forecastRatio > 1 && <p className="text-error-fg mt-1 text-[11px] font-bold">Over budget</p>}
+                </td>
+                <td className="text-ink-muted w-12">
+                  <ArrowUpRight size={18} aria-hidden="true" />
                 </td>
               </tr>
             ))}

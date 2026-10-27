@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 import type { JobStatus, Role } from "@/generated/prisma/enums";
 import { Mark } from "@/components/brand";
@@ -137,6 +138,29 @@ export function PageHeader({ eyebrow, title, subtitle, actions }: { eyebrow: str
       </div>
       {actions && <div className="flex items-center gap-2.5">{actions}</div>}
     </header>
+  );
+}
+
+export function Breadcrumb({ items }: { items: { label: string; href?: string }[] }) {
+  return (
+    <nav aria-label="Breadcrumb" className="mt-5 text-[12px] font-semibold">
+      <ol className="flex items-center gap-2">
+        {items.map((item, i) => (
+          <li key={item.label} className="flex items-center gap-2">
+            {i > 0 && <span className="text-ink-muted" aria-hidden="true">/</span>}
+            {item.href ? (
+              <Link href={item.href} className="text-ink-muted hover:text-ink rounded-[4px]">
+                {item.label}
+              </Link>
+            ) : (
+              <span aria-current="page" className="text-ink">
+                {item.label}
+              </span>
+            )}
+          </li>
+        ))}
+      </ol>
+    </nav>
   );
 }
 
