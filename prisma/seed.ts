@@ -3,10 +3,9 @@
 import { randomBytes } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, type Role, type Worker } from "../src/generated/prisma/client";
+import { pgConfig } from "../src/lib/pg-config";
 
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) throw new Error("DATABASE_URL is not set");
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+const prisma = new PrismaClient({ adapter: new PrismaPg(pgConfig(process.env.DATABASE_URL)) });
 
 const TZ = "Europe/Rome";
 const OVERTIME_AFTER = 480;
