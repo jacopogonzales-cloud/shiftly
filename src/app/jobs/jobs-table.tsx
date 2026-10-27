@@ -17,6 +17,10 @@ export type JobRow = {
   startsAt: number;
   status: JobStatus;
   confirmed: number;
+  /** Proposed by the agent, not yet sent. */
+  proposed: number;
+  /** Sent or confirmed: requests have gone out. */
+  requested: number;
   needed: number;
   budget: string;
   forecast: string;
@@ -91,7 +95,13 @@ export function JobsTable({ rows }: { rows: JobRow[] }) {
                 <td className="text-[13px] whitespace-nowrap">{r.dates}</td>
                 <td className="text-ink-secondary max-w-[220px] text-[13px]">{r.site}</td>
                 <td className="t-number">
-                  {r.confirmed} / {r.needed}
+                  {r.proposed > 0 && r.requested === 0 ? (
+                    <span className="text-ink-secondary">{r.proposed} proposed</span>
+                  ) : (
+                    <>
+                      {r.confirmed} / {r.needed}
+                    </>
+                  )}
                 </td>
                 <td>
                   <JobStatusPill status={r.status} />

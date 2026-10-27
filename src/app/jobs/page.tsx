@@ -72,6 +72,8 @@ async function JobsOverview() {
     startsAt: j.startsAt.getTime(),
     status: j.status,
     confirmed: j.confirmed,
+    proposed: j.proposed,
+    requested: j.sent,
     needed: j.needed,
     budget: formatEUR(j.budgetCents),
     forecast: formatEUR(j.forecastCents),

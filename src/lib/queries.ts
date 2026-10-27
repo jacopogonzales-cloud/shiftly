@@ -60,6 +60,8 @@ export async function getJobs() {
       ...job,
       needed: job.shifts.reduce((n, s) => n + s.headcount, 0),
       confirmed: assignments.filter((a) => a.status === "CONFIRMED").length,
+      proposed: assignments.filter((a) => a.status === "PROPOSED").length,
+      sent: assignments.filter((a) => a.status === "SENT" || a.status === "CONFIRMED").length,
       assigned: live.length,
       declined: assignments.length - live.length,
       // Paid jobs show what actually reached people; everything else shows planned labour cost.
