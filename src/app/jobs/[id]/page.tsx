@@ -41,10 +41,7 @@ async function JobView({ params }: { params: Promise<{ id: string }> }) {
       <Breadcrumb items={[{ label: "Jobs", href: "/jobs" }, { label: jobRef(job.id) }]} />
 
       <header className="mt-3 mb-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <h1 className="t-h1">{job.title}</h1>
-          {canPlan && <PlanButton jobId={job.id} />}
-        </div>
+        <h1 className="t-h1">{job.title}</h1>
         <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
           <div className="text-ink-secondary flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] font-semibold">
             <span className="flex items-center gap-1.5">

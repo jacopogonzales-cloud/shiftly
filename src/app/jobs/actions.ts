@@ -8,6 +8,7 @@ import { logActivity } from "@/lib/activity";
 import { AIError } from "@/lib/ai/openai";
 import { extractJob, type ExtractedJob } from "@/lib/ai/extract";
 import { db } from "@/lib/db";
+import { formatDay } from "@/lib/format";
 import { EDITABLE_STATUSES } from "@/lib/job-detail";
 import { checkAssignment } from "@/lib/planning/constraints";
 import { loadPlanningContext } from "@/lib/planning/context";
@@ -174,7 +175,7 @@ export async function moveAssignmentAction(assignmentId: number, toWorkerId: num
       jobId: a.shift.job.id,
       actor: "operator",
       type: "assignment.moved",
-      message: `${to} replaces ${from} on ${romeDayKey(a.shift.startsAt)}. Constraints re-checked: all clear.`,
+      message: `${to} replaces ${from} on ${formatDay(a.shift.startsAt)}. Constraints re-checked: all clear.`,
       data: { assignmentId: a.id, fromWorkerId: a.workerId, toWorkerId, previousStatus: a.status },
     });
   });

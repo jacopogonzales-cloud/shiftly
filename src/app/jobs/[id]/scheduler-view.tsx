@@ -41,6 +41,7 @@ const PRESETS = {
   hour: {
     base: "hourAndDay",
     tickWidth: 76,
+    displayDateFormat: "ddd DD MMM HH:mm",
     headers: [
       { unit: "day", dateFormat: "ddd DD MMM YYYY" },
       { unit: "hour", dateFormat: "HH:mm" },
@@ -49,6 +50,7 @@ const PRESETS = {
   day: {
     base: "weekAndDay",
     tickWidth: 160,
+    displayDateFormat: "ddd DD MMM HH:mm",
     headers: [
       { unit: "week", dateFormat: "MMM YYYY" },
       { unit: "day", dateFormat: "ddd DD" },
@@ -87,8 +89,9 @@ export default function SchedulerView({ resources, events, validation, startDate
         field: "name",
         width: 248,
         htmlEncode: false,
+        // Read from the record (not a closure) so Bryntum re-renders the row when the data changes.
         renderer: ({ record }: { record: ResourceModel }): DomConfig => {
-          const r = resources.find((x) => x.id === record.id);
+          const r = record.get("info") as SchedulerResource | undefined;
           return {
             class: "shiftly-person",
             children: [
@@ -105,7 +108,7 @@ export default function SchedulerView({ resources, events, validation, startDate
         },
       },
     ],
-    [resources],
+    [],
   );
 
   return (
@@ -120,7 +123,7 @@ export default function SchedulerView({ resources, events, validation, startDate
       rowHeight={58}
       barMargin={12}
       eventStyle="tonal"
-      resources={resources.map((r) => ({ id: r.id, name: r.name }))}
+      resources={resources.map((r) => ({ id: r.id, name: r.name, info: { ...r } }))}
       events={eventData}
       columns={columns}
       timeRanges={nights.map((n, i) => ({ id: `night-${i}`, startDate: n.startDate, endDate: n.endDate, cls: "shiftly-offhours" }))}
@@ -137,6 +140,7 @@ export default function SchedulerView({ resources, events, validation, startDate
       headerMenuFeature={false}
       timeAxisHeaderMenuFeature={false}
       sortFeature={false}
+      scheduleTooltipFeature={false}
       eventTooltipFeature={{
         template: ({ eventRecord }: { eventRecord: EventModel }) => {
           const e = byId.get(Number(eventRecord.id));

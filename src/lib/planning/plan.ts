@@ -22,7 +22,7 @@ const schema = {
   additionalProperties: false,
   required: ["summary", "shifts"],
   properties: {
-    summary: { type: "string", description: "One sentence for the operator: what the plan does and any trade-off. Max 140 characters." },
+    summary: { type: "string", description: "One sentence for the operator on the trade-off behind the picks. No numbers, costs or totals. Max 120 characters." },
     shifts: {
       type: "array",
       items: {
@@ -94,7 +94,7 @@ export async function planJob(jobId: number): Promise<PlanResult> {
         name: w.name,
         reliability: w.reliability,
         hourlyRateEur: (rateOf.get(w.id) ?? 0) / 100,
-        availabilityConfirmed: hasConfirmedAvailability(w, o.slot, romeDayKey),
+        markedAvailableThatDay: hasConfirmedAvailability(w, o.slot, romeDayKey),
       })),
     })),
   };
@@ -108,8 +108,9 @@ export async function planJob(jobId: number): Promise<PlanResult> {
       system: [
         "You staff event-crew shifts for an operator in Milan.",
         "Pick exactly `needed` people per shift, only from that shift's candidates (by workerId).",
-        "Prefer confirmed availability and high reliability; keep cost within budget; reuse the same people across days when it helps continuity.",
+        "Prefer people marked available that day and high reliability; keep cost within budget; reuse the same people across days when it helps continuity.",
         "Each reason is one plain sentence about this person for this shift. English. No hype, no apologies.",
+        "Nobody has been contacted yet: never say a person confirmed, accepted or agreed. Say 'marked available' for availability.",
       ].join("\n"),
       user: JSON.stringify(prompt),
     });
@@ -155,7 +156,7 @@ export async function planJob(jobId: number): Promise<PlanResult> {
     for (const b of backups) {
       if (filled >= o.needed) break;
       if (allowed(b.w.id)) {
-        take(b.w.id, `Qualified and free; reliability ${b.reliability}${b.confirmed ? ", availability confirmed" : ""}.`, "rules");
+        take(b.w.id, `Qualified and free; reliability ${b.reliability}${b.confirmed ? ", marked available that day" : ""}.`, "rules");
         filled++;
       }
     }
@@ -168,10 +169,10 @@ export async function planJob(jobId: number): Promise<PlanResult> {
 
   const costCents = accepted.reduce((n, a) => n + shiftPayCents(a.plannedMinutes, rateOf.get(a.workerId) ?? 0, ctx.rules), 0);
   const people = new Set(accepted.map((a) => a.workerId)).size;
-  const summary =
-    (modelPlan?.summary?.trim() ||
-      `Agent offline: ranked by availability and reliability. ${accepted.length} assignments for ${people} people.`) +
-    (unfilled > 0 ? ` Unfilled: ${unfilledNotes.join(", ")}.` : "");
+  // Figures come from code, never from the model.
+  const facts = `${accepted.length} assignments for ${people} ${people === 1 ? "person" : "people"}, planned ${formatEUR(costCents)}${job.budgetCents > 0 ? ` of ${formatEUR(job.budgetCents)} budget` : ""}.`;
+  const why = modelPlan?.summary?.trim() || "Agent offline: ranked by availability and reliability.";
+  const summary = `${why} ${facts}` + (unfilled > 0 ? ` Unfilled: ${unfilledNotes.join(", ")}.` : "");
 
   await db().$transaction(async (tx) => {
     for (const a of accepted) {
@@ -196,6 +197,6 @@ export async function planJob(jobId: number): Promise<PlanResult> {
     });
   });
 
-  console.info(`planJob ${jobId}: ${accepted.length} proposed, ${unfilled} unfilled, planned ${formatEUR(costCents)}, model ${model ?? "none"}`);
+  console.info(`planJob ${jobId}: ${accepted.length} proposed, ${unfilled} unfilled, planned ${formatEUR(costCents)}, agent ${model ? "used" : "offline"}`);
   return { proposed: accepted.length, unfilled, summary };
 }

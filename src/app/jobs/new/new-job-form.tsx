@@ -2,7 +2,7 @@
 
 import { Check, LoaderCircle, Plus, Trash2 } from "lucide-react";
 import { useState, useTransition } from "react";
-import { buttonClass, Card, Pill, Skeleton } from "@/components/ui";
+import { buttonClass, Card, Skeleton } from "@/components/ui";
 import type { Role } from "@/generated/prisma/enums";
 import { roleLabel } from "@/lib/roles";
 import { createJobAction, extractBriefAction, type DraftJob, type DraftShift } from "../actions";
@@ -133,13 +133,13 @@ export function NewJobForm() {
               {(draft.assumptions.length > 0 || draft.missing.length > 0) && (
                 <ul className="space-y-2 pt-1">
                   {draft.assumptions.map((a) => (
-                    <li key={a}>
-                      <Pill severity="warning">{a.startsWith("Assumed") ? a : `Assumed: ${a}`}</Pill>
+                    <li key={a} className="bg-warning-bg text-warning-fg rounded-[10px] px-3 py-2 text-[12px] leading-[18px] font-bold">
+                      {a.startsWith("Assumed") ? a : `Assumed: ${a}`}
                     </li>
                   ))}
                   {draft.missing.map((m) => (
-                    <li key={m}>
-                      <Pill severity="error">{m.startsWith("Missing") ? m : `Missing: ${m}`}</Pill>
+                    <li key={m} className="bg-error-bg text-error-fg rounded-[10px] px-3 py-2 text-[12px] leading-[18px] font-bold">
+                      {m.startsWith("Missing") ? m : `Missing: ${m}`}
                     </li>
                   ))}
                 </ul>
@@ -197,7 +197,7 @@ export function NewJobForm() {
                           <input type="number" min={0} step={15} className={`${inputClass} t-number w-24`} value={s.breakMinutes} onChange={(e) => updateShift(i, { breakMinutes: Number(e.target.value) })} aria-label={`Shift ${i + 1} break in minutes`} />
                         </td>
                         <td className="px-3">
-                          <select className={`${inputClass} w-36`} value={s.role} onChange={(e) => updateShift(i, { role: e.target.value as Role })} aria-label={`Shift ${i + 1} role`}>
+                          <select className={`${inputClass} w-40`} value={s.role} onChange={(e) => updateShift(i, { role: e.target.value as Role })} aria-label={`Shift ${i + 1} role`}>
                             {ROLES.map((r) => (
                               <option key={r} value={r}>
                                 {roleLabel[r]}
