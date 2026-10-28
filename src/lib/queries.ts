@@ -109,6 +109,7 @@ export async function getPayoutBatches() {
     orderBy: { createdAt: "desc" },
     include: {
       job: { select: { id: true, title: true, client: true } },
+      retryOf: { select: { senderBatchId: true } },
       items: { orderBy: { id: "asc" }, include: { worker: { select: { name: true, role: true, paypalEmail: true } } } },
     },
   });

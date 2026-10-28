@@ -3,15 +3,19 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
-import { Avatar, Breadcrumb, buttonClass, Card, JobStatusPill, Pill, Skeleton, type Severity } from "@/components/ui";
+import { Avatar, Breadcrumb, buttonClass, Card, DemoTag, JobStatusPill, payoutBatchState, PayoutItemPill, Pill, Skeleton, type Severity } from "@/components/ui";
 import type { ActivityLog } from "@/generated/prisma/client";
 import { formatDateRange, formatDay, formatDelta, formatEUR, formatMinutes, formatTime, jobRef } from "@/lib/format";
 import { jobInvitations } from "@/lib/invitations/invitations";
 import { getJobDetail, type JobDetail } from "@/lib/job-detail";
+import { statusSummary } from "@/lib/payouts/logic";
+import { jobPayouts } from "@/lib/payouts/view";
 import { roleLabel } from "@/lib/roles";
 import { addDays, romeDateTime } from "@/lib/time";
 import { CopyLinkButton, PlanButton, SendRequestsButton, StartJobButton } from "./agent-actions";
 import { CrewSchedule, SchedulerSkeleton } from "./crew-schedule";
+import { CheckStatusButton } from "../../payroll/payroll-actions";
+import { PayCrew, PayoutWatcher } from "./pay-crew";
 
 export const metadata: Metadata = { title: "Job" };
 
@@ -29,7 +33,7 @@ async function JobView({ params }: { params: Promise<{ id: string }> }) {
   if (!Number.isInteger(jobId) || jobId <= 0) notFound();
   const detail = await getJobDetail(jobId);
   if (!detail) notFound();
-  const invitations = await jobInvitations(jobId);
+  const [invitations, payouts] = await Promise.all([jobInvitations(jobId), jobPayouts(jobId)]);
 
   const { job, summary } = detail;
   const canPlan = job.status === "PLANNING" && summary.open > 0;
@@ -105,11 +109,13 @@ async function JobView({ params }: { params: Promise<{ id: string }> }) {
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px] wide:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-6">
+          {payouts.batches.length > 0 && <Payouts batches={payouts.batches} />}
           {invitations.some((i) => i.status !== "not-sent") && <Invitations invitations={invitations} />}
           <ShiftsAndHours detail={detail} />
         </div>
-        <AgentPanel detail={detail} canPlan={canPlan} awaiting={invitations.filter((i) => i.status === "awaiting").length} />
+        <AgentPanel detail={detail} canPlan={canPlan} awaiting={invitations.filter((i) => i.status === "awaiting").length} payouts={payouts} />
       </div>
+      {payouts.open && <PayoutWatcher jobId={job.id} />}
     </>
   );
 }
@@ -207,11 +213,17 @@ const ENTRY_TITLE: Record<string, string> = {
   "hours.reconciled": "Hours reconciled",
   "hours.confirmed": "Hours approved",
   "payout.approved": "Payout approved",
+  "payout.submitted": "Sent to PayPal",
+  "payout.status": "PayPal update",
+  "payout.rejected": "PayPal refused the payout",
+  "payout.unverified": "Payout not confirmed yet",
   "payout.batch.success": "PayPal batch completed",
   "job.paid": "Job paid",
 };
 
-function AgentPanel({ detail, canPlan, awaiting }: { detail: JobDetail; canPlan: boolean; awaiting: number }) {
+type Payouts = Awaited<ReturnType<typeof jobPayouts>>;
+
+function AgentPanel({ detail, canPlan, awaiting, payouts }: { detail: JobDetail; canPlan: boolean; awaiting: number; payouts: Payouts }) {
   const { job } = detail;
   const entries = job.activity;
 
@@ -234,7 +246,7 @@ function AgentPanel({ detail, canPlan, awaiting }: { detail: JobDetail; canPlan:
       )}
 
       <div className="border-line mt-5 space-y-2 border-t pt-5">
-        <NextAction detail={detail} canPlan={canPlan} awaiting={awaiting} />
+        <NextAction detail={detail} canPlan={canPlan} awaiting={awaiting} payouts={payouts} />
       </div>
     </aside>
   );
@@ -252,7 +264,7 @@ function Disabled({ label, note }: { label: string; note: string }) {
 }
 
 /** The one next step for this job, in lifecycle order. */
-function NextAction({ detail, canPlan, awaiting }: { detail: JobDetail; canPlan: boolean; awaiting: number }) {
+function NextAction({ detail, canPlan, awaiting, payouts }: { detail: JobDetail; canPlan: boolean; awaiting: number; payouts: Payouts }) {
   const { job, summary } = detail;
   if (job.status === "PLANNING") {
     if (summary.proposed > 0 && summary.conflicts > 0) return <Disabled label="Send availability requests" note={`Resolve ${summary.conflicts} ${summary.conflicts === 1 ? "conflict" : "conflicts"} first.`} />;
@@ -268,8 +280,119 @@ function NextAction({ detail, canPlan, awaiting }: { detail: JobDetail; canPlan:
         <ClipboardCheck size={18} aria-hidden="true" /> Close shifts
       </Link>
     );
-  if (job.status === "DONE") return <Disabled label="Review payouts" note="Payouts are not switched on yet." />;
+  if ((job.status === "DONE" || job.status === "PAID") && payouts.preview) {
+    const { preview } = payouts;
+    return (
+      <PayCrew
+        payable={job.status === "DONE" && !preview.blocker && preview.plan.kind === "create"}
+        jobId={job.id}
+        subtitle={`${job.title} · ${jobRef(job.id)}`}
+        recipients={preview.recipients}
+        totalCents={preview.totalCents}
+        minutes={preview.minutes}
+        skipped={preview.skipped}
+        batches={payouts.batches}
+      >
+        <PayoutNext status={job.status} payouts={payouts} jobId={job.id} />
+      </PayCrew>
+    );
+  }
   return null;
+}
+
+/** Done/Paid when nothing new can be paid: say what PayPal is doing and what's left. */
+function PayoutNext({ status, payouts, jobId }: { status: string; payouts: Payouts; jobId: number }) {
+  const live = payouts.batches.filter((b) => !b.demo);
+  const latestItems = new Map<number, string>();
+  for (const b of [...live].reverse()) for (const i of b.items) latestItems.set(i.workerId, i.status);
+  const states = [...latestItems.values()];
+  const failed = states.filter((s) => s === "FAILED").length;
+  const unclaimed = states.filter((s) => s === "UNCLAIMED").length;
+  const payroll = (
+    <Link href="/payroll" className={`${buttonClass.quiet} w-full`}>
+      View in Payroll <ArrowUpRight size={14} aria-hidden="true" />
+    </Link>
+  );
+
+  if (payouts.open)
+    return (
+      <>
+        <p className="text-[13px] font-bold">Payout in progress</p>
+        <p className="text-ink-muted text-[12px]">
+          {payouts.open.senderBatchId}: {statusSummary(payouts.open.items.map((i) => i.status))}. Checking PayPal every 20 seconds.
+        </p>
+        <CheckStatusButton jobId={jobId} wide />
+        {payroll}
+      </>
+    );
+  if (status === "PAID")
+    return (
+      <>
+        <p className="text-success-fg text-[13px] font-bold">Everyone is paid.</p>
+        {payroll}
+      </>
+    );
+  if (failed > 0 || unclaimed > 0)
+    return (
+      <>
+        <p className="text-[13px] font-bold">{statusSummary(states)}</p>
+        <p className="text-ink-muted text-[12px]">
+          {unclaimed > 0 && `Unclaimed money waits for the recipient to claim it on PayPal; it is never sent twice. `}
+          {failed > 0 && `Failed payouts can be retried from Payroll.`}
+        </p>
+        {live[0] && <CheckStatusButton batchId={live[0].id} wide />}
+        {failed > 0 ? (
+          <Link href="/payroll" className={`${buttonClass.primary} h-12 w-full`}>
+            Retry failed in Payroll
+          </Link>
+        ) : (
+          payroll
+        )}
+      </>
+    );
+  return <Disabled label="Review payouts" note={payouts.preview?.blocker ?? "Nothing to pay."} />;
+}
+
+/** Every payout attempt for this job, newest first; item pills show PayPal's raw status on hover. */
+function Payouts({ batches }: { batches: Payouts["batches"] }) {
+  return (
+    <Card>
+      <div className="border-line flex items-center justify-between gap-4 border-b px-6 py-[18px]">
+        <div>
+          <h2 className="t-h3">Payouts</h2>
+          <p className="text-ink-muted t-small font-medium">PayPal Sandbox. Paid shows only after PayPal reports SUCCESS.</p>
+        </div>
+        <Link href="/payroll" className="text-ink-secondary hover:text-ink inline-flex h-10 items-center gap-1 text-[12px] font-bold">
+          Payroll <ArrowUpRight size={14} aria-hidden="true" />
+        </Link>
+      </div>
+      {batches.map((b) => {
+        const state = payoutBatchState(b.items.map((i) => i.status));
+        return (
+          <section key={b.id} className="border-line border-b last:border-b-0">
+            <div className="bg-surface-alt flex flex-wrap items-center gap-2.5 px-6 py-3">
+              <span className="t-number-xs font-semibold">{b.senderBatchId}</span>
+              <Pill severity={state.severity} title={`PayPal batch status: ${b.status}`}>
+                {state.label}
+              </Pill>
+              {b.demo && <DemoTag />}
+              <span className="t-number-xs text-ink-muted ml-auto">{b.paypalBatchId ? `PayPal ${b.paypalBatchId}` : "Not at PayPal"}</span>
+            </div>
+            {b.errorMessage && <p className="text-error-fg px-6 pt-3 text-[12px] font-semibold">{b.errorMessage}</p>}
+            <ul>
+              {b.items.map((i) => (
+                <li key={i.id} className="border-line flex min-h-[48px] items-center gap-3 border-t px-6 py-1.5 first:border-t-0">
+                  <span className="min-w-0 flex-1 text-[13px] font-bold">{i.name}</span>
+                  <PayoutItemPill status={i.status} />
+                  <span className="t-number w-[96px] text-right">{formatEUR(i.amountCents)}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+    </Card>
+  );
 }
 
 const INVITE_STATE: Record<string, { severity: Severity; label: string }> = {

@@ -96,6 +96,7 @@ export function payoutBatchState(itemStatuses: string[]): { severity: Severity; 
   const paid = itemStatuses.filter((s) => s === "SUCCESS").length;
   if (itemStatuses.length > 0 && paid === itemStatuses.length) return { severity: "success", label: "Completed" };
   if (itemStatuses.every((s) => s === "DRAFT")) return { severity: "neutral", label: "Not sent" };
+  if (itemStatuses.every((s) => s === "REJECTED")) return { severity: "error", label: "Rejected" };
   const unresolved = itemStatuses.some((s) => payoutItemState(s).severity === "info");
   if (paid > 0) return { severity: "warning", label: "Partially paid" };
   if (unresolved) return { severity: "info", label: "Processing" };

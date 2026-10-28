@@ -11,6 +11,8 @@ const IN_FLIGHT_BATCH = new Set(["DRAFT", "NEW", "PENDING", "PROCESSING"]);
 export type ItemFacts = { workerId: number; status: string };
 export type BatchFacts = { id: number; senderBatchId: string; status: string; demo: boolean; items: ItemFacts[] };
 
+export const isCommitted = (status: string) => COMMITTED.has(status);
+
 export function isBatchOpen(b: Pick<BatchFacts, "status" | "demo" | "items">): boolean {
   return !b.demo && (IN_FLIGHT_BATCH.has(b.status) || b.items.some((i) => IN_FLIGHT_ITEM.has(i.status)));
 }
