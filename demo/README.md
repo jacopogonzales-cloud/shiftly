@@ -33,6 +33,17 @@ npm run demo:record
 - `SHIFTLY_URL` overrides the site (default `https://shiftly-r26a.onrender.com`). On Render's free plan, open the site once first so it isn't asleep.
 - `DEMO_STOP_AFTER=4 npm run demo:record` stops after scene 4, for a rehearsal. It still creates a job, so reset again before the real take.
 
+## PayPal scene on its own
+
+```bash
+npm run demo:paypal
+```
+
+- **Login, off camera:** opens the same Chrome profile at the PayPal Sandbox sign-in page (1280×900) and waits until you're logged in. An existing session skips the login.
+- **Recording:** starts in a fresh browser context that reuses the session cookies, so the video begins on the activity page, never on the login form.
+- **The shot:** scrolls to the newest "Fieramente Allestimenti · Payment Received" row and holds 6 s. If that row is missing, it falls back to "You have a payment from Fieramente Allestimenti", then to the first "Payment Received" row.
+- **Output:** `demo/out/paypal-<stamp>.webm`, plus a `paypal` entry in `demo/out/marks.json`. The recorder's own marks are left untouched.
+
 ## Scenes
 
 | # | What | Main holds |

@@ -21,7 +21,8 @@
     "payouts:smoke": "tsx --env-file=.env.local scripts/payouts-smoke.ts",
     "test": "tsx --tsconfig tsconfig.json --test \"src/**/*.test.ts\"",
     "demo:record": "node demo/record.mjs",
-    "demo:login": "node demo/record.mjs --login"
+    "demo:login": "node demo/record.mjs --login",
+    "demo:paypal": "node demo/record-paypal.mjs"
   },
   "dependencies": {
     "@bryntum/scheduler": "npm:@bryntum/scheduler-trial@^7.3.7",

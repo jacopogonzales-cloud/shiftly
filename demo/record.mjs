@@ -475,16 +475,17 @@ try {
   mark("8 paypal: start");
   const paypal = await context.newPage();
   popupVideos.push({ video: paypal.video(), label: "paypal" });
-  await goto(paypal, PAYPAL_ACTIVITY);
+  // No networkidle on PayPal: its pages never go idle. The list shows the sender name, "Fieramente Allestimenti".
+  await paypal.goto(PAYPAL_ACTIVITY, { waitUntil: "domcontentloaded" });
   await pause(2500);
   await declineCookies(paypal);
   if (/signin|login/i.test(paypal.url())) {
     await waitEnter("PayPal asks to log in. Log in as Elena's Sandbox Personal account in the PayPal window (then trim this part).");
-    await goto(paypal, PAYPAL_ACTIVITY);
+    await paypal.goto(PAYPAL_ACTIVITY, { waitUntil: "domcontentloaded" });
     await declineCookies(paypal);
   }
-  await pause(3000);
-  const entry = paypal.getByText(/Fieramente Allestimenti|You have a payment/i).first();
+  const entry = paypal.getByText(/Fieramente Allestimenti|You have a payment|Payment Received/i).first();
+  await entry.waitFor({ timeout: 45_000 }).catch(() => {});
   if (await entry.count()) await scrollTo(entry);
   else warn("payment entry not found on the PayPal activity page");
   mark("8 paypal: payment entry");
