@@ -123,36 +123,41 @@ model Availability {
 }
 
 model PayoutBatch {
-  id            Int          @id @default(autoincrement())
+  id            Int           @id @default(autoincrement())
   jobId         Int
-  job           Job          @relation(fields: [jobId], references: [id])
-  senderBatchId String       @unique
-  paypalBatchId String?      @unique
-  status        String       @default("DRAFT") // DRAFT, then PayPal batch_status (PENDING, PROCESSING, SUCCESS, DENIED, ...)
+  job           Job           @relation(fields: [jobId], references: [id])
+  senderBatchId String        @unique
+  paypalBatchId String?       @unique
+  status        String        @default("DRAFT") // DRAFT, then PayPal batch_status (PENDING, PROCESSING, SUCCESS, DENIED, ...); REJECTED if PayPal refused the request
+  errorMessage  String? // why PayPal refused or why the response couldn't be confirmed
   totalCents    Int
   createdBy     Actor
   approvedAt    DateTime?
-  demo          Boolean      @default(false) // seeded history, never sent to PayPal
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  demo          Boolean       @default(false) // seeded history, never sent to PayPal
+  retryOfId     Int? // "Retry failed" links the new attempt to the batch whose items failed
+  retryOf       PayoutBatch?  @relation("Retry", fields: [retryOfId], references: [id])
+  retries       PayoutBatch[] @relation("Retry")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
   items         PayoutItem[]
 
   @@index([jobId])
 }
 
 model PayoutItem {
-  id           Int         @id @default(autoincrement())
-  batchId      Int
-  batch        PayoutBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  workerId     Int
-  worker       Worker      @relation(fields: [workerId], references: [id])
-  amountCents  Int
-  senderItemId String      @unique
-  paypalItemId String?     @unique
-  status       String      @default("DRAFT") // DRAFT, then PayPal transaction_status
-  errorMessage String?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id            Int         @id @default(autoincrement())
+  batchId       Int
+  batch         PayoutBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  workerId      Int
+  worker        Worker      @relation(fields: [workerId], references: [id])
+  amountCents   Int
+  senderItemId  String      @unique
+  paypalItemId  String?     @unique
+  transactionId String? // PayPal transaction id once the money moved
+  status        String      @default("DRAFT") // DRAFT, then PayPal transaction_status
+  errorMessage  String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   @@index([workerId])
 }
