@@ -3,12 +3,12 @@
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import { Segmented } from "@/components/filters";
-import { Skeleton } from "@/components/ui";
 import type { SchedulerEvent, SchedulerResource, ValidationContext } from "@/lib/job-detail";
 import { roleLabel, roleTokens } from "@/lib/roles";
+import { SchedulerSkeleton } from "./scheduler-skeleton";
 import type { Zoom } from "./scheduler-view";
 
-// Bryntum touches window/document on import: client-only.
+// Client-only: the view loads Bryntum from /vendor/bryntum at runtime (see bryntum.ts).
 const SchedulerView = dynamic(() => import("./scheduler-view"), {
   ssr: false,
   loading: () => <SchedulerSkeleton rows={6} />,
@@ -95,25 +95,5 @@ export function CrewSchedule(props: CrewScheduleProps) {
           : "Schedule locked once the job has started."}
       </p>
     </section>
-  );
-}
-
-export function SchedulerSkeleton({ rows }: { rows: number }) {
-  return (
-    <div className="border-line bg-surface overflow-hidden rounded-[var(--radius-lg)] border" aria-busy="true">
-      <div className="bg-surface-alt border-line flex h-16 border-b">
-        <div className="border-line w-[248px] border-r" />
-      </div>
-      {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="border-line flex h-[58px] items-center border-b last:border-b-0">
-          <div className="border-line flex h-full w-[248px] shrink-0 items-center gap-2.5 border-r px-4">
-            <Skeleton className="size-[30px] rounded-full" />
-            <Skeleton className="h-3 w-28" />
-          </div>
-          <Skeleton className="ml-10 h-[34px] w-64 rounded-[8px]" />
-        </div>
-      ))}
-      <span className="sr-only">Loading schedule…</span>
-    </div>
   );
 }

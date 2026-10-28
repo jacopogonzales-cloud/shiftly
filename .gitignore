@@ -160,3 +160,6 @@ next-env.d.ts
 /src/generated/
 
 /src/generated/prisma
+
+# Bryntum Scheduler files copied from node_modules at dev/build time (scripts/vendor-bryntum.mjs)
+/public/vendor/

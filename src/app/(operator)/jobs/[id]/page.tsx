@@ -13,7 +13,8 @@ import { jobPayouts } from "@/lib/payouts/view";
 import { roleLabel } from "@/lib/roles";
 import { addDays, romeDateTime } from "@/lib/time";
 import { CopyLinkButton, PlanButton, SendRequestsButton, StartJobButton } from "./agent-actions";
-import { CrewSchedule, SchedulerSkeleton } from "./crew-schedule";
+import { CrewSchedule } from "./crew-schedule";
+import { SchedulerSkeleton } from "./scheduler-skeleton";
 import { CheckStatusButton } from "../../payroll/payroll-actions";
 import { PayCrew, PayoutWatcher } from "./pay-crew";
 

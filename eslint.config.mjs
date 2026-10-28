@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Bryntum's prebuilt files, copied from node_modules by scripts/vendor-bryntum.mjs.
+    "public/vendor/**",
   ]),
 ]);
 

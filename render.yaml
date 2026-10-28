@@ -2,7 +2,8 @@
 # The Postgres database already exists on Render; its URL is set by hand (DATABASE_URL below).
 #
 # Build: install without lifecycle scripts (the Bryntum trial ships an obfuscated postinstall that the app
-# doesn't need), apply pending migrations, then `npm run build` (prisma generate + next build).
+# doesn't need), apply pending migrations, then `npm run build`. Its prebuild step copies Bryntum's prebuilt files
+# into public/vendor/bryntum; they're loaded at runtime and never bundled (bundling them exceeded 8 GB here).
 # The seed never runs here: reseed on purpose with `npm run db:reset-demo` from a machine with DATABASE_URL set.
 #
 # Env vars marked `sync: false` are prompted for when the Blueprint is created, and are never stored in this file.
