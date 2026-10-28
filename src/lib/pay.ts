@@ -37,3 +37,34 @@ export function crewPayCents(
   for (const w of byWorker.values()) total += personPayCents(w.shifts, w.rate, rules);
   return total;
 }
+
+export type PayLine = { workerId: number; minutes: number; overtimeMinutes: number; amountCents: number };
+
+/**
+ * Per-worker pay for a job from approved minutes: what the Pay crew dialog shows and what a payout sends.
+ * Each working day is rounded to the cent on its own, so the total is always the sum of what people see.
+ * Sorted by worker id; workers with no paid minutes are left out.
+ */
+export function payLines(
+  shifts: { workerId: number; day: string; minutes: number; hourlyRateCents: number }[],
+  rules: PayRules = DEFAULT_PAY_RULES,
+): PayLine[] {
+  const byWorker = new Map<number, { rate: number; days: Map<string, number> }>();
+  for (const s of shifts) {
+    const w = byWorker.get(s.workerId) ?? { rate: s.hourlyRateCents, days: new Map<string, number>() };
+    w.days.set(s.day, (w.days.get(s.day) ?? 0) + s.minutes);
+    byWorker.set(s.workerId, w);
+  }
+  return [...byWorker.entries()]
+    .map(([workerId, w]) => {
+      const days = [...w.days.values()];
+      return {
+        workerId,
+        minutes: days.reduce((n, m) => n + m, 0),
+        overtimeMinutes: days.reduce((n, m) => n + Math.max(0, m - rules.overtimeAfterMinutes), 0),
+        amountCents: days.reduce((n, m) => n + dayPayCents(m, w.rate, rules), 0),
+      };
+    })
+    .filter((l) => l.minutes > 0)
+    .sort((a, b) => a.workerId - b.workerId);
+}
