@@ -61,6 +61,7 @@ async function Hours({ params }: { params: Promise<{ id: string }> }) {
         <HoursSheet
           jobId={job.id}
           editable={editable}
+          approved={job.status === "DONE" || job.status === "PAID"}
           overtimeAfterMinutes={overtimeAfterMinutes}
           rows={rows.map((r) => ({ ...r }))}
           flags={flags}

@@ -71,6 +71,13 @@ export function formatMinutes(minutes: number): string {
   return m === 0 ? `${h}h` : `${h}h ${String(m).padStart(2, "0")}m`;
 }
 
+/** Signed difference: "+30 min", "−15 min", "+1h 15m"; "—" when zero. */
+export function formatDelta(minutes: number): string {
+  if (minutes === 0) return "—";
+  const abs = Math.abs(minutes);
+  return `${minutes > 0 ? "+" : "−"}${abs < 60 ? `${abs} min` : formatMinutes(abs)}`;
+}
+
 export function initials(name: string): string {
   const words = name.trim().split(/\s+/);
   return ((words[0]?.[0] ?? "") + (words.length > 1 ? words[words.length - 1][0] : "")).toUpperCase();

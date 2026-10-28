@@ -3,7 +3,7 @@
 import { refresh } from "next/cache";
 import { logActivity } from "@/lib/activity";
 import { db } from "@/lib/db";
-import { formatMinutes } from "@/lib/format";
+import { formatDelta, formatMinutes } from "@/lib/format";
 import { sumMinutes } from "@/lib/hours";
 import { loadHours } from "@/lib/hours-data";
 
@@ -31,7 +31,7 @@ export async function saveHoursAction(jobId: number, entries: { assignmentId: nu
   const totals = sumMinutes(after.rows);
   const names = flagged.slice(0, 3).map((f) => {
     const r = after.rows.find((x) => x.assignmentId === f.assignmentId)!;
-    return `${r.name.split(" ")[0]} ${f.delta > 0 ? "+" : "−"}${formatMinutes(Math.abs(f.delta))} on ${r.dayLabel}`;
+    return `${r.name.split(" ")[0]} ${formatDelta(f.delta)} on ${r.dayLabel}`;
   });
   await db().$transaction(async (tx) => {
     await logActivity(tx, { jobId, actor: "operator", type: "hours.saved", message: `Actual hours saved: ${formatMinutes(totals.actual)} against ${formatMinutes(totals.planned)} planned.` });

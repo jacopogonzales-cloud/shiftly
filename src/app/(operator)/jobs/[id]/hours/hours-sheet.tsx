@@ -5,7 +5,7 @@ import { useMemo, useState, useTransition } from "react";
 import { toast } from "@/components/toast";
 import { Avatar, buttonClass, Card, Pill } from "@/components/ui";
 import type { Role } from "@/generated/prisma/enums";
-import { formatMinutes } from "@/lib/format";
+import { formatDelta, formatMinutes } from "@/lib/format";
 import { FLAG_OVER_MINUTES, reconcile, type Flag } from "@/lib/hours";
 import { roleLabel } from "@/lib/roles";
 import { approveHoursAction, saveHoursAction } from "./actions";
@@ -25,13 +25,13 @@ type Row = {
 };
 
 const STEP = 15;
-const signed = (m: number) => (m === 0 ? "—" : `${m > 0 ? "+" : "−"}${formatMinutes(Math.abs(m))}`);
 
 export function HoursSheet({
   jobId,
   rows: initial,
   flags: savedFlags,
   editable,
+  approved,
   overtimeAfterMinutes,
   lockedNote,
 }: {
@@ -39,6 +39,7 @@ export function HoursSheet({
   rows: Row[];
   flags: Flag[];
   editable: boolean;
+  approved: boolean;
   overtimeAfterMinutes: number;
   lockedNote: string | null;
 }) {
@@ -81,8 +82,9 @@ export function HoursSheet({
         {[
           { label: "Planned", value: formatMinutes(totals.planned) },
           { label: "Actual", value: formatMinutes(totals.actual) },
-          { label: "Difference", value: signed(totals.actual - totals.planned) },
-          { label: "Needs review", value: String(flags.length), tone: flags.length > 0 },
+          { label: "Difference", value: formatDelta(totals.actual - totals.planned) },
+          // After approval every flag has been reviewed; the notes stay on the rows for the record.
+          approved ? { label: "Needs review", value: "All reviewed" } : { label: "Needs review", value: String(flags.length), tone: flags.length > 0 },
         ].map((m) => (
           <div key={m.label} className="border-line border-r border-b px-6 py-5 last:border-r-0 wide:border-b-0 [&:nth-child(2n)]:border-r-0 wide:[&:nth-child(2n)]:border-r wide:last:border-r-0">
             <p className="text-ink-muted t-small font-bold">{m.label}</p>
@@ -156,7 +158,7 @@ export function HoursSheet({
                         <span className="t-number">{formatMinutes(r.actual)}</span>
                       )}
                     </td>
-                    <td className="px-4 py-4">{flag ? <Pill severity="warning">{signed(delta)}</Pill> : <span className="t-number text-ink-muted">{signed(delta)}</span>}</td>
+                    <td className="px-4 py-4">{flag ? <Pill severity="warning">{formatDelta(delta)}</Pill> : <span className="t-number text-ink-muted">{formatDelta(delta)}</span>}</td>
                     <td className="max-w-[300px] py-3 pr-6 pl-4">
                       {flag ? (
                         <div>

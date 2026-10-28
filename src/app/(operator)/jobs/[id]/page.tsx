@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 import { Avatar, Breadcrumb, buttonClass, Card, JobStatusPill, Pill, Skeleton, type Severity } from "@/components/ui";
 import type { ActivityLog } from "@/generated/prisma/client";
-import { formatDateRange, formatDay, formatEUR, formatMinutes, formatTime, jobRef } from "@/lib/format";
+import { formatDateRange, formatDay, formatDelta, formatEUR, formatMinutes, formatTime, jobRef } from "@/lib/format";
 import { jobInvitations } from "@/lib/invitations/invitations";
 import { getJobDetail, type JobDetail } from "@/lib/job-detail";
 import { roleLabel } from "@/lib/roles";
@@ -163,11 +163,11 @@ function ShiftsAndHours({ detail }: { detail: JobDetail }) {
                       {diff === null || !anyActual ? (
                         <span className="text-ink-muted">—</span>
                       ) : Math.abs(diff) > 15 ? (
-                        <Pill severity="warning">{`${diff > 0 ? "+" : "−"}${formatMinutes(Math.abs(diff))}`}</Pill>
+                        <Pill severity="warning">{formatDelta(diff)}</Pill>
                       ) : diff === 0 ? (
                         <span className="text-ink-muted">—</span>
                       ) : (
-                        <span className="t-number">{`${diff > 0 ? "+" : "−"}${Math.abs(diff)}m`}</span>
+                        <span className="t-number">{formatDelta(diff)}</span>
                       )}
                     </td>
                     <td className="t-number px-5 text-right">{formatEUR(anyActual && p.actualCents !== null ? p.actualCents : p.plannedCents)}</td>
