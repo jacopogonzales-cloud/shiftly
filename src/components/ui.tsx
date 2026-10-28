@@ -91,6 +91,18 @@ export function PayoutItemPill({ status }: { status: string }) {
   );
 }
 
+/** One short line under an item; PayPal's full message stays in the tooltip. */
+export function PayoutItemNote({ status, message }: { status: string; message: string | null }) {
+  if (!message) return null;
+  const short = status === "UNCLAIMED" ? "No PayPal account yet. Sign-up link sent; returns after 30 days if unclaimed." : message;
+  const tone = payoutItemState(status).severity === "error" ? "text-error-fg" : "text-ink-muted";
+  return (
+    <p className={`${tone} mt-0.5 line-clamp-2 max-w-[360px] text-[11px] leading-4`} title={message}>
+      {short}
+    </p>
+  );
+}
+
 /** Batch state is computed from its items, never from batch_status alone. */
 export function payoutBatchState(itemStatuses: string[]): { severity: Severity; label: string } {
   const paid = itemStatuses.filter((s) => s === "SUCCESS").length;

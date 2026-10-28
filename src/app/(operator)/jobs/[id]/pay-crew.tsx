@@ -4,7 +4,7 @@ import { ArrowUpRight, Check, LoaderCircle, Lock, RefreshCw, Send, X } from "luc
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { toast } from "@/components/toast";
-import { Avatar, buttonClass, PayoutItemPill } from "@/components/ui";
+import { Avatar, buttonClass, PayoutItemNote, PayoutItemPill } from "@/components/ui";
 import type { Role } from "@/generated/prisma/enums";
 import { formatEUR, formatMinutes } from "@/lib/format";
 import { statusSummary } from "@/lib/payouts/logic";
@@ -222,7 +222,7 @@ function SentView({ batch, onClose }: { batch: BatchView | undefined; onClose: (
             {batch.paypalBatchId && ` · PayPal ${batch.paypalBatchId}`}
           </p>
           <p className="mt-1 text-[13px] font-bold">
-            {paid.length} of {batch.items.length} paid · {statusSummary(batch.items.map((i) => i.status))}
+            {[`${paid.length} of ${batch.items.length} paid`, statusSummary(batch.items.filter((i) => i.status !== "SUCCESS").map((i) => i.status))].filter(Boolean).join(" · ")}
           </p>
         </div>
         <ul>
@@ -231,7 +231,7 @@ function SentView({ batch, onClose }: { batch: BatchView | undefined; onClose: (
               <Avatar name={i.name} role={i.role} />
               <div className="min-w-0 flex-1">
                 <p className="text-[13px] font-bold">{i.name}</p>
-                {i.errorMessage && <p className="text-ink-muted text-[11px]">{i.errorMessage}</p>}
+                <PayoutItemNote status={i.status} message={i.errorMessage} />
               </div>
               <PayoutItemPill status={i.status} />
               <span className="t-number w-[96px] text-right text-[14px] font-semibold">{formatEUR(i.amountCents)}</span>

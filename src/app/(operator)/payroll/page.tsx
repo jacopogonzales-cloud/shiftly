@@ -13,6 +13,7 @@ import {
   Pill,
   payoutBatchState,
   payoutItemState,
+  PayoutItemNote,
   PayoutItemPill,
   Skeleton,
   TableFootnote,
@@ -174,7 +175,7 @@ function BatchRow({ batch, open, history, covered }: { batch: Batch; open: boole
                 <td className="t-number text-right">{formatEUR(item.amountCents)}</td>
                 <td>
                   <PayoutItemPill status={item.status} />
-                  {item.errorMessage && <p className="text-error-fg mt-1 text-[12px]">{item.errorMessage}</p>}
+                  <PayoutItemNote status={item.status} message={item.errorMessage} />
                 </td>
                 <td className="t-number-xs text-ink-secondary">
                   {item.paypalItemId ? <span title={`PayPal item ${item.paypalItemId}`}>Item {item.paypalItemId}</span> : "—"}
