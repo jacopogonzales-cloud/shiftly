@@ -50,13 +50,15 @@ export async function saveHoursAction(jobId: number, entries: { assignmentId: nu
   return { ok: true, message: flagged.length === 0 ? "Hours saved. Everything matches the plan." : `Hours saved. ${flagged.length} to review.` };
 }
 
-/** Operator signs off: every flagged row must be marked reviewed. IN_PROGRESS → DONE. */
+/**
+ * Operator signs off: every flagged row must be marked reviewed. IN_PROGRESS → DONE.
+ * Rows never saved are approved as shown, i.e. at their planned minutes, and stored as such.
+ */
 export async function approveHoursAction(jobId: number, reviewed: number[], explanation: string): Promise<HoursResult> {
   const current = await loadHours(jobId);
   if (!current) return { ok: false, message: "Job not found." };
   if (current.job.status !== "IN_PROGRESS") return { ok: false, message: "Only a job in progress can have its hours approved." };
   if (current.rows.length === 0) return { ok: false, message: "No completed shifts to approve." };
-  if (current.rows.some((r) => !r.saved)) return { ok: false, message: "Save the hours before approving." };
   const missing = current.flags.filter((f) => !reviewed.includes(f.assignmentId));
   if (missing.length > 0) return { ok: false, message: `Mark ${missing.length} flagged ${missing.length === 1 ? "row" : "rows"} as reviewed first.` };
 
@@ -65,6 +67,8 @@ export async function approveHoursAction(jobId: number, reviewed: number[], expl
   await db().$transaction(async (tx) => {
     const res = await tx.job.updateMany({ where: { id: jobId, status: "IN_PROGRESS" }, data: { status: "DONE" } });
     if (res.count === 0) throw new Error("status changed");
+    const prefilled = current.rows.filter((r) => !r.saved);
+    for (const r of prefilled) await tx.assignment.update({ where: { id: r.assignmentId }, data: { actualMinutes: r.planned } });
     await logActivity(tx, {
       jobId,
       actor: "operator",

@@ -50,7 +50,9 @@ export function HoursSheet({
   const [approving, startApprove] = useTransition();
 
   const rows = initial.map((r) => ({ ...r, actual: actual.get(r.assignmentId) ?? r.actual }));
-  const dirty = rows.some((r) => !r.saved || r.actual !== initial.find((x) => x.assignmentId === r.assignmentId)!.actual);
+  // Unsaved changes = edits since the page loaded. Untouched prefilled rows are approved as planned.
+  const dirty = rows.some((r) => r.actual !== initial.find((x) => x.assignmentId === r.assignmentId)!.actual);
+  const allSaved = initial.every((r) => r.saved);
   // Live preview of what the agent will flag; the saved flags are the ones that gate approval.
   const liveFlags = useMemo(() => reconcile(rows, overtimeAfterMinutes), [rows, overtimeAfterMinutes]);
   const flags = dirty ? liveFlags : savedFlags;
@@ -106,7 +108,7 @@ export function HoursSheet({
           {editable && (
             <button type="button" onClick={save} disabled={saving} className={`${buttonClass.secondary} disabled:opacity-60`}>
               {saving ? <LoaderCircle size={16} className="animate-spin" aria-hidden="true" /> : <Save size={16} aria-hidden="true" />}
-              {saving ? "Saving…" : dirty ? "Save hours" : "Saved"}
+              {saving ? "Saving…" : dirty || !allSaved ? "Save hours" : "Saved"}
             </button>
           )}
         </div>
@@ -218,7 +220,7 @@ export function HoursSheet({
               {approving ? "Approving…" : "Approve hours"}
             </button>
             <p className="text-ink-muted text-[12px]">
-              {dirty ? (rows.some((r) => !r.saved) ? "Save hours first." : "Save your changes first.") : unreviewed > 0 ? `${unreviewed} flagged ${unreviewed === 1 ? "row" : "rows"} to review.` : "Ready to approve."}
+              {dirty ? "Save hours first." : unreviewed > 0 ? `${unreviewed} flagged ${unreviewed === 1 ? "row" : "rows"} to review.` : "Ready to approve."}
             </p>
           </div>
         </div>
