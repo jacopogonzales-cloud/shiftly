@@ -1,0 +1,41 @@
+# Render Blueprint for Shiftly: one Node web service in Frankfurt.
+# The Postgres database already exists on Render; its URL is set by hand (DATABASE_URL below).
+#
+# Build: install without lifecycle scripts (the Bryntum trial ships an obfuscated postinstall that the app
+# doesn't need), apply pending migrations, then `npm run build` (prisma generate + next build).
+# The seed never runs here: reseed on purpose with `npm run db:reset-demo` from a machine with DATABASE_URL set.
+#
+# Env vars marked `sync: false` are prompted for when the Blueprint is created, and are never stored in this file.
+
+services:
+  - type: web
+    name: shiftly
+    runtime: node
+    region: frankfurt
+    plan: free
+    branch: main
+    buildCommand: npm ci --ignore-scripts && npx prisma migrate deploy && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      # Render Postgres "Internal Database URL" (same region: private network, no TLS needed).
+      - key: DATABASE_URL
+        sync: false
+      # PayPal REST app credentials, Sandbox. The API host is hard-coded to the sandbox in code.
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_SECRET
+        sync: false
+      # Id of the webhook registered for https://<service>.onrender.com/api/paypal/webhook.
+      # Leave empty on the first deploy; the webhook route answers 503 until it is set.
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      # Comma-separated model ids, first = preferred.
+      - key: OPENAI_MODELS
+        sync: false
+      # Shared secret for POST /api/paypal/reconcile (header x-cron-secret) and the invitation link signing key.
+      - key: SHIFTLY_CRON_SECRET
+        sync: false
