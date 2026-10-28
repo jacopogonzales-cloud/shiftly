@@ -163,3 +163,7 @@ next-env.d.ts
 
 # Bryntum Scheduler files copied from node_modules at dev/build time (scripts/vendor-bryntum.mjs)
 /public/vendor/
+
+# Demo recorder output and its browser profile (PayPal Sandbox login)
+/demo/out/
+/demo/.profile/
