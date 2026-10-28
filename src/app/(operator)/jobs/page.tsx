@@ -55,12 +55,12 @@ async function JobsOverview() {
     );
   }
 
-  const toPay = jobs.filter((j) => j.status === "DONE").length;
+  const toPay = jobs.filter((j) => j.payableCents > 0).length;
   const withDeclines = jobs.filter((j) => j.declined > 0 && j.status === "PLANNING").length;
   const attention = toPay + withDeclines;
   const assignments = jobs.reduce((n, j) => n + j.assigned, 0);
   const staffed = jobs.filter((j) => j.assigned > 0).length;
-  const readyToPayCents = jobs.filter((j) => j.status === "DONE").reduce((n, j) => n + j.forecastCents, 0);
+  const readyToPayCents = jobs.reduce((n, j) => n + j.payableCents, 0);
 
   const rows: JobRow[] = jobs.map((j) => ({
     id: j.id,
@@ -78,7 +78,7 @@ async function JobsOverview() {
     budget: formatEUR(j.budgetCents),
     forecast: formatEUR(j.forecastCents),
     forecastRatio: j.budgetCents > 0 ? j.forecastCents / j.budgetCents : 0,
-    forecastLabel: j.status === "PAID" ? "final" : "planned",
+    forecastLabel: j.status === "PAID" ? "final" : j.status === "DONE" ? "approved" : "planned",
   }));
 
   return (
@@ -92,7 +92,7 @@ async function JobsOverview() {
             caption: attention === 0 ? "Nothing waiting on you" : [toPay && `${toPay} to pay`, withDeclines && `${withDeclines} with declines`].filter(Boolean).join(" · "),
           },
           { label: "Crew assignments", value: String(assignments), caption: `Booked across ${staffed} ${staffed === 1 ? "job" : "jobs"}` },
-          { label: "Ready to pay", value: formatEUR(readyToPayCents), money: true, caption: toPay === 0 ? "No jobs waiting for payout" : `Planned cost of ${toPay} ${toPay === 1 ? "job" : "jobs"}` },
+          { label: "Ready to pay", value: formatEUR(readyToPayCents), money: true, caption: toPay === 0 ? "No approved pay waiting" : `Approved hours on ${toPay} ${toPay === 1 ? "job" : "jobs"}` },
         ]}
       />
       <JobsTable rows={rows} />

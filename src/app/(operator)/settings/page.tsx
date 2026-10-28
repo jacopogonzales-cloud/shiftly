@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Suspense } from "react";
 import { Card, CardHeader, EmptyState, PageHeader, Pill, RoleTag, Skeleton } from "@/components/ui";
 import { formatEUR, formatMinutes } from "@/lib/format";
-import { getRoleRates, getSettings, paypalCredentialsConfigured } from "@/lib/queries";
+import { getRoleRates, getSettings, paypalCredentialsConfigured, paypalWebhookConfigured } from "@/lib/queries";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -52,8 +52,8 @@ async function CompanyAndRules() {
 
   if (!settings) {
     return (
-      <EmptyState title="No company set up">
-        Run the seed to create the company profile and pay rules: <span className="t-number text-ink">npm run db:seed</span>
+      <EmptyState title="No company set up yet">
+        The company profile and pay rules haven&apos;t been created for this workspace.
       </EmptyState>
     );
   }
@@ -107,6 +107,7 @@ async function CompanyAndRules() {
 
 async function PaypalPanel() {
   const configured = await paypalCredentialsConfigured();
+  const webhook = await paypalWebhookConfigured();
   return (
     <Panel id="paypal" title="PayPal" subtitle="Payouts go through the PayPal Sandbox only." aside={configured ? <Pill severity="success">Sandbox credentials set</Pill> : <Pill severity="error">Credentials missing</Pill>}>
       <Row label="Environment">
@@ -116,6 +117,9 @@ async function PaypalPanel() {
         <span className="t-number">api-m.sandbox.paypal.com</span>
       </Row>
       <Row label="Payout approval">Operator confirms every batch</Row>
+      <Row label="Status updates" hint={webhook ? "webhook and periodic checks" : "periodic checks"}>
+        {webhook ? <Pill severity="success">Webhook connected</Pill> : <Pill severity="neutral">Webhook not set up</Pill>}
+      </Row>
       <p className="text-ink-muted border-line border-t px-6 py-4 text-[12px] leading-[18px]">
         Sandbox uses simulated transactions. No real money moves. Credentials stay on the server and are never sent to the browser.
       </p>

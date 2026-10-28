@@ -205,7 +205,7 @@ function BatchRow({ batch, open, history, covered }: { batch: Batch; open: boole
       )}
       {batch.demo && (
         <p className="border-line bg-surface-alt text-ink-muted border-t px-6 py-3 text-[12px]">
-          Demo data: seeded history to show the layout. These IDs were never sent to PayPal.
+          Demo data: sample history. These payouts were never sent to PayPal.
         </p>
       )}
     </details>

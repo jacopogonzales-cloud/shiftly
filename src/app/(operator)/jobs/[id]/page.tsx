@@ -360,7 +360,7 @@ function Payouts({ batches }: { batches: Payouts["batches"] }) {
       <div className="border-line flex items-center justify-between gap-4 border-b px-6 py-[18px]">
         <div>
           <h2 className="t-h3">Payouts</h2>
-          <p className="text-ink-muted t-small font-medium">PayPal Sandbox. Paid shows only after PayPal reports SUCCESS.</p>
+          <p className="text-ink-muted t-small font-medium">PayPal Sandbox. Paid shows only once PayPal confirms the transfer.</p>
         </div>
         <Link href="/payroll" className="text-ink-secondary hover:text-ink inline-flex h-10 items-center gap-1 text-[12px] font-bold">
           Payroll <ArrowUpRight size={14} aria-hidden="true" />
@@ -413,7 +413,7 @@ function Invitations({ invitations }: { invitations: Awaited<ReturnType<typeof j
       <div className="border-line flex items-center justify-between gap-4 border-b px-6 py-[18px]">
         <div>
           <h2 className="t-h3">Invitations</h2>
-          <p className="text-ink-muted t-small font-medium">No email is sent in this demo: open a link to answer as that person.</p>
+          <p className="text-ink-muted t-small font-medium">Requests aren&apos;t emailed in the sandbox. Open a link to answer as that person.</p>
         </div>
         <p className="text-ink-muted t-small font-medium whitespace-nowrap">
           {answered} of {sent} answered
@@ -458,7 +458,7 @@ function Invitations({ invitations }: { invitations: Awaited<ReturnType<typeof j
 }
 
 function AgentEntry({ entry, latest }: { entry: ActivityLog; latest: boolean }) {
-  const title = ENTRY_TITLE[entry.type] ?? entry.type;
+  const title = ENTRY_TITLE[entry.type] ?? "Update";
   const actor: Record<string, ReactNode> = { agent: "Agent", operator: "You", paypal: "PayPal", crew: "Crew" };
   const data = (entry.data ?? {}) as { agentAvailable?: boolean; seed?: boolean };
   return (

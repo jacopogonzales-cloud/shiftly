@@ -132,7 +132,7 @@ export function PersonHistory({ name, email, history }: { name: string; email: s
                       {h.date} · {h.batch}
                     </span>
                   </div>
-                  <p className="t-number-xs text-ink-muted mt-1">{h.transactionId ? `Transaction ${h.transactionId}` : h.demo ? "Seeded record, never sent to PayPal" : "No transaction yet"}</p>
+                  <p className="t-number-xs text-ink-muted mt-1">{h.transactionId ? `Transaction ${h.transactionId}` : h.demo ? "Sample record, never sent to PayPal" : "No transaction yet"}</p>
                 </li>
               ))}
             </ol>

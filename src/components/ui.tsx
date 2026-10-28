@@ -33,7 +33,7 @@ export function Pill({ severity, children, title }: { severity: Severity; childr
 export function DemoTag() {
   return (
     <span
-      title="Seeded history: these records were never sent to PayPal"
+      title="Sample history: never sent to PayPal"
       className="border-line text-neutral-fg inline-flex h-[26px] items-center rounded-full border bg-[var(--surface-alt)] px-[9px] text-[11px] leading-none font-extrabold whitespace-nowrap"
     >
       Demo data
@@ -220,7 +220,8 @@ export function MetricStrip({ metrics }: { metrics: { label: string; value: Reac
 /** Table shell: surface-alt header, 11px uppercase labels, hairline rows; scrolls instead of squeezing. */
 export function Table({ head, minWidth, label, children }: { head: { label: string; align?: "right"; className?: string }[]; minWidth?: number; label: string; children: ReactNode }) {
   return (
-    <div className="overflow-x-auto">
+    // relative: keeps absolutely positioned bits (sr-only headers, row link overlays) inside the scroll area.
+    <div className="relative overflow-x-auto">
       <table aria-label={label} className="w-full border-collapse text-left" style={{ minWidth }}>
         <thead>
           <tr className="border-line bg-surface-alt border-b">

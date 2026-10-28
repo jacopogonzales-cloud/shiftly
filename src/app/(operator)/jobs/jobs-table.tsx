@@ -25,7 +25,7 @@ export type JobRow = {
   budget: string;
   forecast: string;
   forecastRatio: number;
-  forecastLabel: "planned" | "final";
+  forecastLabel: "planned" | "approved" | "final";
 };
 
 type Segment = "all" | "upcoming" | "to-pay" | "paid";

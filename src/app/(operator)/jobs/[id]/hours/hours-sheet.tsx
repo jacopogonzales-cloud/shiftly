@@ -218,7 +218,7 @@ export function HoursSheet({
               {approving ? "Approving…" : "Approve hours"}
             </button>
             <p className="text-ink-muted text-[12px]">
-              {dirty ? "Save your changes first." : unreviewed > 0 ? `${unreviewed} flagged ${unreviewed === 1 ? "row" : "rows"} to review.` : "Ready to approve."}
+              {dirty ? (rows.some((r) => !r.saved) ? "Save hours first." : "Save your changes first.") : unreviewed > 0 ? `${unreviewed} flagged ${unreviewed === 1 ? "row" : "rows"} to review.` : "Ready to approve."}
             </p>
           </div>
         </div>

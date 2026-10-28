@@ -247,7 +247,7 @@ function SentView({ batch, onClose }: { batch: BatchView | undefined; onClose: (
           </span>
         </div>
         <p className="text-ink-muted mt-2 text-[12px]">
-          {batch.open ? "Statuses update from PayPal every 20 seconds. Paid shows only after PayPal reports SUCCESS." : "PayPal has settled every item it can. Unclaimed money waits for the recipient."}
+          {batch.open ? "Statuses update from PayPal every 20 seconds. Paid shows only once PayPal confirms the transfer." : "PayPal has settled every item it can. Unclaimed money waits for the recipient."}
         </p>
         <div className="mt-5 flex justify-end gap-3">
           <button type="button" onClick={onClose} className={buttonClass.secondary}>

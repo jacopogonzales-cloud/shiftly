@@ -52,12 +52,12 @@ export function CrewTable({ rows }: { rows: CrewRow[] }) {
         ) : (
           <Table
             label="Crew table"
-            minWidth={1000}
+            minWidth={840}
             head={[
               { label: "Person" },
               { label: "Role" },
               { label: "Hourly rate", align: "right" },
-              { label: "PayPal email" },
+              { label: "PayPal email", className: "hidden wide:table-cell" },
               { label: "Reliability" },
               { label: "Availability today" },
             ]}
@@ -74,6 +74,8 @@ export function CrewTable({ rows }: { rows: CrewRow[] }) {
                         <p className="text-ink-muted text-[11px] leading-4">
                           {w.notes ?? `${w.jobCount} ${w.jobCount === 1 ? "job" : "jobs"} with you`}
                         </p>
+                        {/* Below 1200px the email moves under the name so rate and availability stay visible. */}
+                        <p className="text-ink-secondary text-[11px] leading-4 wide:hidden">{w.email}</p>
                       </div>
                     </div>
                   </td>
@@ -84,7 +86,7 @@ export function CrewTable({ rows }: { rows: CrewRow[] }) {
                     {w.rate}
                     <span className="text-ink-muted">/h</span>
                   </td>
-                  <td className="text-ink-secondary text-[13px] whitespace-nowrap">{w.email}</td>
+                  <td className="text-ink-secondary hidden text-[13px] whitespace-nowrap wide:table-cell">{w.email}</td>
                   <td>
                     <div className="flex items-center gap-3" aria-label={`Reliability ${w.reliability} out of 100`}>
                       <span className="t-number w-6 text-right">{w.reliability}</span>

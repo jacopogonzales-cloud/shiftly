@@ -2,7 +2,8 @@ import "server-only";
 import { connection } from "next/server";
 import { db } from "@/lib/db";
 import { TIME_ZONE } from "@/lib/format";
-import { crewPayCents, DEFAULT_PAY_RULES, type PayRules } from "@/lib/pay";
+import { crewPayCents, DEFAULT_PAY_RULES, payLines, type PayRules } from "@/lib/pay";
+import { isCommitted } from "@/lib/payouts/logic";
 
 // Read-side queries for the shell. Each one waits for a request so nothing touches the DB at build time.
 
@@ -39,10 +40,10 @@ export async function getJobs() {
           select: {
             headcount: true,
             startsAt: true,
-            assignments: { select: { status: true, workerId: true, plannedMinutes: true, worker: { select: { hourlyRateCents: true } } } },
+            assignments: { select: { status: true, workerId: true, plannedMinutes: true, actualMinutes: true, worker: { select: { hourlyRateCents: true } } } },
           },
         },
-        payoutBatches: { select: { items: { select: { status: true, amountCents: true } } } },
+        payoutBatches: { select: { items: { select: { status: true, amountCents: true, workerId: true } } } },
       },
     }),
     payRules(),
@@ -55,7 +56,19 @@ export async function getJobs() {
       live.map((a) => ({ workerId: a.workerId, day: a.day, minutes: a.plannedMinutes, hourlyRateCents: a.worker.hourlyRateCents })),
       rules,
     );
-    const paidCents = job.payoutBatches.flatMap((b) => b.items).filter((i) => i.status === "SUCCESS").reduce((n, i) => n + i.amountCents, 0);
+    const items = job.payoutBatches.flatMap((b) => b.items);
+    const paidCents = items.filter((i) => i.status === "SUCCESS").reduce((n, i) => n + i.amountCents, 0);
+    // Approved pay per person (Done jobs), and the part of it no payout has reached or is still carrying.
+    const approved =
+      job.status === "DONE"
+        ? payLines(
+            assignments
+              .filter((a) => a.status === "CONFIRMED" && a.actualMinutes !== null)
+              .map((a) => ({ workerId: a.workerId, day: a.day, minutes: a.actualMinutes!, hourlyRateCents: a.worker.hourlyRateCents })),
+            rules,
+          )
+        : [];
+    const covered = new Set(items.filter((i) => isCommitted(i.status)).map((i) => i.workerId));
     return {
       ...job,
       needed: job.shifts.reduce((n, s) => n + s.headcount, 0),
@@ -64,8 +77,9 @@ export async function getJobs() {
       sent: assignments.filter((a) => a.status === "SENT" || a.status === "CONFIRMED").length,
       assigned: live.length,
       declined: assignments.length - live.length,
-      // Paid jobs show what actually reached people; everything else shows planned labour cost.
-      forecastCents: job.status === "PAID" ? paidCents : plannedCents,
+      // Paid jobs show what reached people, Done jobs the approved cost, everything else planned labour cost.
+      forecastCents: job.status === "PAID" ? paidCents : job.status === "DONE" ? approved.reduce((n, l) => n + l.amountCents, 0) : plannedCents,
+      payableCents: approved.filter((l) => !covered.has(l.workerId)).reduce((n, l) => n + l.amountCents, 0),
     };
   });
 }
@@ -125,6 +139,11 @@ export async function getRoleRates() {
     orderBy: { role: "asc" },
   });
   return groups.map((g) => ({ role: g.role, min: g._min.hourlyRateCents ?? 0, max: g._max.hourlyRateCents ?? 0, count: g._count._all }));
+}
+
+export async function paypalWebhookConfigured(): Promise<boolean> {
+  await connection();
+  return Boolean(process.env.PAYPAL_WEBHOOK_ID);
 }
 
 export async function paypalCredentialsConfigured(): Promise<boolean> {
