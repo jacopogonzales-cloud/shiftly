@@ -80,8 +80,13 @@ const workers: { name: string; role: Role; rate: number; reliability: number; ph
   { name: "Andrea Lombardi", role: "ELETTRICISTA", rate: 2350, reliability: 86, phone: "+39 335 701 4419", notes: "PES/PAV certified." },
 ];
 
-function emailFor(index: number, name: string): string {
-  if (index < 3) return recipients[index];
+// The three sandbox Personal accounts belong to people the planner books for a stand build, so a demo payout
+// shows real SUCCESS items next to UNCLAIMED ones (unregistered @example.com addresses).
+const SANDBOX_HOLDERS = ["Elena Gallo", "Sara Ricci", "Paolo Ferrari"];
+
+function emailFor(name: string): string {
+  const i = SANDBOX_HOLDERS.indexOf(name);
+  if (i >= 0) return recipients[i];
   return `${name.toLowerCase().replace(" ", ".")}@example.com`;
 }
 
@@ -95,10 +100,10 @@ async function main() {
   });
 
   const crew: Worker[] = [];
-  for (const [i, w] of workers.entries()) {
+  for (const w of workers) {
     crew.push(
       await prisma.worker.create({
-        data: { name: w.name, role: w.role, hourlyRateCents: w.rate, paypalEmail: emailFor(i, w.name), phone: w.phone, reliability: w.reliability, notes: w.notes },
+        data: { name: w.name, role: w.role, hourlyRateCents: w.rate, paypalEmail: emailFor(w.name), phone: w.phone, reliability: w.reliability, notes: w.notes },
       }),
     );
   }
